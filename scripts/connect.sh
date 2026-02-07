@@ -184,10 +184,8 @@ show_status() {
     echo "Configuration:"
     echo "============="
     local server_url=$(jq -r '.server // "https://clawdtalk.com"' "$CONFIG_FILE" 2>/dev/null)
-    local voice_model=$(jq -r '.voice_agent_model // "not set"' "$CONFIG_FILE" 2>/dev/null)
     
     echo "  Server: $server_url"
-    echo "  Model: $voice_model"
     echo ""
     echo "Commands:"
     echo "========="

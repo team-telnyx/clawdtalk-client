@@ -1,5 +1,4 @@
 {
   "api_key": "YOUR_API_KEY_FROM_CLAWDTALK_COM",
-  "server": "https://clawdtalk.com",
-  "voice_agent_model": "anthropic/claude-sonnet-4-20250514"
+  "server": "https://clawdtalk.com"
 }

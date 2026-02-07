@@ -44,17 +44,11 @@ fi
 # Parse configuration
 api_key=$(jq -r '.api_key // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
 server=$(jq -r '.server // "https://clawdtalk.com"' "$CONFIG_FILE" 2>/dev/null || echo "https://clawdtalk.com")
-voice_model=$(jq -r '.voice_agent_model // "not set"' "$CONFIG_FILE")
-tools_note="gateway-managed"
-greeting=$(jq -r '.greeting // "default"' "$CONFIG_FILE")
 
 # Display config summary
 echo "📋 Configuration"
 echo "----------------"
 echo "Server: $server"
-echo "Model: $voice_model"
-echo "Tools: $tools_note"
-echo "Greeting: ${greeting:0:50}$([ ${#greeting} -gt 50 ] && echo '...')"
 
 if [ -z "$api_key" ] || [ "$api_key" = "null" ] || [ "$api_key" = "YOUR_API_KEY_HERE" ]; then
     echo "API Key: ❌ NOT SET"

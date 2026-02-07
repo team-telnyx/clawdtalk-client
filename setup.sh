@@ -66,33 +66,6 @@ else
     echo "   ⚠️  No API key entered — you can add it to skill-config.json later"
 fi
 
-# Voice model preference
-echo ""
-echo "🧠 Voice Model"
-echo "=============="
-echo ""
-echo "Choose the model for voice calls:"
-echo ""
-echo "  1) Fast  — Haiku 3.5 (quicker responses, lower cost, basic conversations)"
-echo "  2) Smart — Sonnet    (better reasoning, reliable tool use, default)"
-echo ""
-
-while true; do
-    read -p "Choose [1=Fast / 2=Smart] (default: 2): " model_choice
-    model_choice="${model_choice:-2}"
-    if [ "$model_choice" = "1" ]; then
-        voice_model="anthropic/claude-haiku-3-5-20241022"
-        echo "   ✓ Selected: Fast (Haiku 3.5)"
-        break
-    elif [ "$model_choice" = "2" ]; then
-        voice_model="anthropic/claude-sonnet-4-20250514"
-        echo "   ✓ Selected: Smart (Sonnet)"
-        break
-    else
-        echo "   Please enter 1 or 2"
-    fi
-done
-
 # Auto-detect gateway config (support both clawdbot and openclaw)
 echo ""
 echo "🔧 Configuring voice agent..."
@@ -138,11 +111,9 @@ if [ -n "$GATEWAY_CONFIG" ] && [ -f "$GATEWAY_CONFIG" ]; then
         voice_agent=$(jq -n \
             --arg name "${main_agent_name} Voice" \
             --arg workspace "$main_agent_workspace" \
-            --arg model "$voice_model" \
             '{
                 id: "voice",
                 name: $name,
-                model: $model,
                 workspace: $workspace
             }')
 
@@ -198,10 +169,7 @@ fi
 cat > "$CONFIG_FILE" << EOF
 {
   "api_key": $api_key_json,
-  "server": "https://clawdtalk.com",
-  "voice_agent_model": "$voice_model",
-  "greeting": "Hey, this is your assistant. How can I help?",
-  "max_conversation_turns": 20
+  "server": "https://clawdtalk.com"
 }
 EOF
 

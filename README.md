@@ -94,8 +94,7 @@ Missions dispatch AI assistants to make calls or send SMS to a list of targets:
 ```json
 {
   "api_key": "cc_live_xxx",
-  "server": "https://clawdtalk.com",
-  "voice_agent_model": "anthropic/claude-sonnet-4-20250514"
+  "server": "https://clawdtalk.com"
 }
 ```
 
@@ -103,7 +102,6 @@ Missions dispatch AI assistants to make calls or send SMS to a list of targets:
 |--------|-------------|
 | `api_key` | Your API key from clawdtalk.com |
 | `server` | ClawdTalk server URL (default: `https://clawdtalk.com`) |
-| `voice_agent_model` | Model for voice responses |
 
 ## How It Works
 

@@ -92,7 +92,6 @@ class ClawdTalkClient {
     this.gatewayToolsUrl = null;
     this.gatewayToken = null;
     this.gatewayAgent = 'voice';
-    this.gatewayModel = 'anthropic/claude-sonnet-4-20250514';
     this.voiceContext = DEFAULT_VOICE_CONTEXT;
     this.maxConversationTurns = 20;
     this.greeting = DEFAULT_GREETING;
@@ -144,19 +143,12 @@ class ClawdTalkClient {
     this.gatewayToolsUrl = gwConfig.toolsUrl;
     this.gatewayToken = gwConfig.token;
 
-    if (this.config.voice_agent_model) {
-      this.gatewayModel = this.config.voice_agent_model;
-    }
-    if (this.config.voice_context) {
-      this.voiceContext = this.config.voice_context;
-    }
     if (this.config.max_conversation_turns) {
       this.maxConversationTurns = this.config.max_conversation_turns;
     }
     this.greeting = this.config.greeting || DEFAULT_GREETING;
 
-    this.log('INFO', 'Model: ' + this.gatewayModel);
-    this.log('INFO', 'v1.0: Full agentic mode with tool execution');
+    this.log('INFO', 'Gateway: ' + this.gatewayChatUrl);
   }
 
   log(level, msg) {
@@ -583,7 +575,6 @@ class ClawdTalkClient {
           'x-clawdbot-session-key': 'voice-call-' + callId,
         },
         body: JSON.stringify({
-          model: this.gatewayModel,
           messages: messages,
           max_tokens: 500,
           stream: false,
@@ -742,7 +733,6 @@ class ClawdTalkClient {
     this.log('INFO', 'Chat endpoint: ' + this.gatewayChatUrl);
     this.log('INFO', 'Tools endpoint: ' + this.gatewayToolsUrl);
     this.log('INFO', 'Agent: ' + this.gatewayAgent);
-    this.log('INFO', 'Model: ' + this.gatewayModel);
     this.connect();
   }
 }
