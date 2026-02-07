@@ -1,0 +1,5 @@
+node_modules/
+skill-config.json
+.connect.log
+.connect.pid
+*.log
