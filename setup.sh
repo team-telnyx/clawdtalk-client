@@ -57,13 +57,32 @@ echo "  1. Go to https://clawdtalk.com and sign in with Google"
 echo "  2. Set up your phone number in Settings"
 echo "  3. Generate an API key from the Dashboard"
 echo ""
-read -s -p "Enter your API key (or press Enter to skip for now): " api_key
-echo ""
 
-if [ -n "$api_key" ]; then
+# Check if CLAWDTALK_API_KEY env var exists
+use_env_var=""
+if [ -n "$CLAWDTALK_API_KEY" ]; then
+    echo "   ✓ Found CLAWDTALK_API_KEY in environment"
+    read -p "   Use \${CLAWDTALK_API_KEY} instead of storing plaintext? (Y/n): " use_env_choice
+    if [[ ! "$use_env_choice" =~ ^[Nn]$ ]]; then
+        use_env_var="yes"
+        api_key=""
+    fi
+fi
+
+if [ -z "$use_env_var" ]; then
+    read -s -p "Enter your API key (or press Enter to skip for now): " api_key
+    echo ""
+fi
+
+if [ -n "$use_env_var" ]; then
+    echo "   ✓ Will use \${CLAWDTALK_API_KEY} environment variable"
+elif [ -n "$api_key" ]; then
     echo "   ✓ API key saved"
 else
     echo "   ⚠️  No API key entered — you can add it to skill-config.json later"
+    echo ""
+    echo "   💡 Tip: Set CLAWDTALK_API_KEY in ~/.openclaw/.env or ~/.clawdbot/.env"
+    echo "      then use \${CLAWDTALK_API_KEY} in skill-config.json"
 fi
 
 # Auto-detect gateway config (support both clawdbot and openclaw)
@@ -160,7 +179,9 @@ echo ""
 echo "💾 Creating skill configuration..."
 
 # Build the API key value
-if [ -n "$api_key" ]; then
+if [ -n "$use_env_var" ]; then
+    api_key_json='"\${CLAWDTALK_API_KEY}"'
+elif [ -n "$api_key" ]; then
     api_key_json="\"$api_key\""
 else
     api_key_json="null"
