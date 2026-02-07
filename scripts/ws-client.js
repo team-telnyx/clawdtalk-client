@@ -47,6 +47,20 @@ VOICE RULES:
 - After using a tool, give a brief spoken confirmation of what you did.
 - NEVER output raw JSON, function calls, or code. Everything you say will be spoken aloud.`;
 
+/**
+ * Resolve ${ENV_VAR} references in a string value.
+ * Returns the original value if no match or env var not set.
+ */
+function resolveEnvVar(value) {
+  if (!value || typeof value !== 'string') return value;
+  var match = value.match(/^\$\{(.+)\}$/);
+  if (match) {
+    var envName = match[1];
+    return process.env[envName] || value;
+  }
+  return value;
+}
+
 function loadGatewayConfig() {
   for (var i = 0; i < CLAWDBOT_CONFIG_PATHS.length; i++) {
     try {
@@ -54,6 +68,10 @@ function loadGatewayConfig() {
         var config = JSON.parse(fs.readFileSync(CLAWDBOT_CONFIG_PATHS[i], 'utf8'));
         var port = (config.gateway && config.gateway.port) || 18789;
         var token = (config.gateway && config.gateway.auth && config.gateway.auth.token) || '';
+        
+        // Resolve ${ENV_VAR} references in token
+        token = resolveEnvVar(token);
+        
         return { 
           chatUrl: 'http://127.0.0.1:' + port + '/v1/chat/completions',
           toolsUrl: 'http://127.0.0.1:' + port + '/tools/invoke',

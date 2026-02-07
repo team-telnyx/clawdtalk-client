@@ -89,6 +89,11 @@ start_connection() {
     
     echo "🚀 Starting WebSocket connection..."
     
+    # Source .env so the WS client can resolve ${VAR} references in gateway config
+    for envfile in "$HOME/.openclaw/.env" "$HOME/.clawdbot/.env"; do
+        [ -f "$envfile" ] && set -a && . "$envfile" && set +a
+    done
+    
     # Rotate log if it's too big (> 1MB)
     if [ -f "$LOG_FILE" ] && [ $(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE" 2>/dev/null || echo 0) -gt 1048576 ]; then
         echo "🔄 Rotating large log file..."
