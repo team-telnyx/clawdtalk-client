@@ -22,12 +22,11 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   exit 1
 fi
 
-ENV=$(jq -r '.environment // "production"' "$CONFIG_FILE")
-API_KEY=$(jq -r ".api_keys.$ENV // .api_keys.production // empty" "$CONFIG_FILE")
-SERVER=$(jq -r ".servers.$ENV // .servers.production // \"https://clawdtalk.com\"" "$CONFIG_FILE")
+API_KEY=$(jq -r '.api_key // empty' "$CONFIG_FILE")
+SERVER=$(jq -r '.server // "https://clawdtalk.com"' "$CONFIG_FILE")
 
 if [[ -z "$API_KEY" || "$API_KEY" == "null" ]]; then
-  echo "Error: No API key configured for environment '$ENV'" >&2
+  echo "Error: No API key configured. Add api_key to skill-config.json" >&2
   exit 1
 fi
 

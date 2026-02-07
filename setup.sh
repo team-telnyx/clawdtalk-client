@@ -197,17 +197,9 @@ fi
 
 cat > "$CONFIG_FILE" << EOF
 {
-  "environment": "production",
-  "api_keys": {
-    "production": $api_key_json,
-    "development": null
-  },
-  "servers": {
-    "production": "https://clawdtalk.com",
-    "development": "https://dev.clawdtalk.com"
-  },
+  "api_key": $api_key_json,
+  "server": "https://clawdtalk.com",
   "voice_agent_model": "$voice_model",
-  "voice_context": null,
   "greeting": "Hey, this is your assistant. How can I help?",
   "max_conversation_turns": 20
 }
@@ -230,7 +222,7 @@ if [ -z "$api_key" ]; then
     echo "   • Generate an API key from the Dashboard"
     echo ""
     echo "2. Add it to skill-config.json:"
-    echo "   Edit api_keys.production with your key"
+    echo "   Set the api_key field"
     echo ""
     echo "3. Start the connection:"
     echo "   ./scripts/connect.sh start"

@@ -1,15 +1,5 @@
 {
-  "environment": "production",
-
-  "api_keys": {
-    "production": "YOUR_API_KEY_FROM_CLAWDTALK_COM",
-    "development": null
-  },
-
-  "servers": {
-    "production": "https://clawdtalk.com",
-    "development": "https://dev.clawdtalk.com"
-  },
-
+  "api_key": "YOUR_API_KEY_FROM_CLAWDTALK_COM",
+  "server": "https://clawdtalk.com",
   "voice_agent_model": "anthropic/claude-sonnet-4-20250514"
 }

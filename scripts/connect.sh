@@ -36,14 +36,13 @@ check_config() {
         exit 1
     fi
     
-    # Check if we have API key (environment-based or legacy flat key)
-    local env=$(jq -r '.environment // "production"' "$CONFIG_FILE" 2>/dev/null || echo "production")
-    local api_key=$(jq -r ".api_keys.${env} // .api_key // empty" "$CONFIG_FILE" 2>/dev/null || echo "")
+    # Check if we have API key
+    local api_key=$(jq -r '.api_key // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
     if [ -z "$api_key" ] || [ "$api_key" = "null" ] || [ "$api_key" = "YOUR_API_KEY_HERE" ]; then
         echo -e "${RED}❌ No API key configured.${NC}"
         echo ""
         echo "Get your API key from https://clawdtalk.com → Dashboard"
-        echo "Then add it to skill-config.json under api_keys.$env"
+        echo "Then add it to skill-config.json"
         exit 1
     fi
 }
@@ -184,11 +183,9 @@ show_status() {
     echo ""
     echo "Configuration:"
     echo "============="
-    local env=$(jq -r '.environment // "production"' "$CONFIG_FILE" 2>/dev/null)
-    local server_url=$(jq -r ".servers.${env} // .clawd_talk_server // \"unknown\"" "$CONFIG_FILE" 2>/dev/null)
+    local server_url=$(jq -r '.server // "https://clawdtalk.com"' "$CONFIG_FILE" 2>/dev/null)
     local voice_model=$(jq -r '.voice_agent_model // "not set"' "$CONFIG_FILE" 2>/dev/null)
     
-    echo "  Environment: $env"
     echo "  Server: $server_url"
     echo "  Model: $voice_model"
     echo ""

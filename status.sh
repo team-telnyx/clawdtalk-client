@@ -42,9 +42,8 @@ if ! command -v jq &> /dev/null; then
 fi
 
 # Parse configuration
-environment=$(jq -r '.environment // "production"' "$CONFIG_FILE")
-api_key=$(jq -r ".api_keys.${environment} // .api_key // empty" "$CONFIG_FILE" 2>/dev/null || echo "")
-server=$(jq -r ".servers.${environment} // .clawd_talk_server // \"https://clawdtalk.com\"" "$CONFIG_FILE" 2>/dev/null || echo "https://clawdtalk.com")
+api_key=$(jq -r '.api_key // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
+server=$(jq -r '.server // "https://clawdtalk.com"' "$CONFIG_FILE" 2>/dev/null || echo "https://clawdtalk.com")
 voice_model=$(jq -r '.voice_agent_model // "not set"' "$CONFIG_FILE")
 tools_note="gateway-managed"
 greeting=$(jq -r '.greeting // "default"' "$CONFIG_FILE")
@@ -52,7 +51,6 @@ greeting=$(jq -r '.greeting // "default"' "$CONFIG_FILE")
 # Display config summary
 echo "📋 Configuration"
 echo "----------------"
-echo "Environment: $environment"
 echo "Server: $server"
 echo "Model: $voice_model"
 echo "Tools: $tools_note"
@@ -62,7 +60,7 @@ if [ -z "$api_key" ] || [ "$api_key" = "null" ] || [ "$api_key" = "YOUR_API_KEY_
     echo "API Key: ❌ NOT SET"
     echo ""
     echo "Get your API key from https://clawdtalk.com → Dashboard"
-    echo "Then add it to skill-config.json under api_keys.$environment"
+    echo "Then add it to skill-config.json"
 else
     masked_key="${api_key:0:6}...${api_key: -4}"
     echo "API Key: ✅ $masked_key"

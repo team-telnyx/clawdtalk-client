@@ -124,22 +124,14 @@ class ClawdTalkClient {
   loadConfig() {
     try {
       this.config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
-      var env = this.config.environment || 'production';
-      var servers = this.config.servers || {};
-      var apiKeys = this.config.api_keys || {};
-
-      if (!this.config.api_key && apiKeys[env]) {
-        this.config.api_key = apiKeys[env];
-      }
-      if (!this.config.clawd_talk_server && servers[env]) {
-        this.config.clawd_talk_server = servers[env];
-      }
-      if (!this.config.clawd_talk_server) {
-        this.config.clawd_talk_server = 'https://clawdtalk.com';
+      
+      // Use server field, default to clawdtalk.com
+      if (!this.config.server) {
+        this.config.server = 'https://clawdtalk.com';
       }
 
       if (!this.config.api_key) throw new Error('No API key configured');
-      this.log('INFO', 'Config loaded [' + env + '] -> ' + this.config.clawd_talk_server);
+      this.log('INFO', 'Config loaded -> ' + this.config.server);
     } catch (err) {
       this.log('ERROR', 'Config: ' + err.message);
       process.exit(1);
@@ -177,7 +169,7 @@ class ClawdTalkClient {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
     if (this.isShuttingDown) return;
 
-    var serverUrl = this.config.clawd_talk_server.replace(/^http/, 'ws');
+    var serverUrl = this.config.server.replace(/^http/, 'ws');
     this.log('INFO', 'Connecting to ' + serverUrl + '...');
 
     this.ws = new WebSocket(serverUrl + '/ws', { handshakeTimeout: 10000 });

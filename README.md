@@ -93,23 +93,16 @@ Missions dispatch AI assistants to make calls or send SMS to a list of targets:
 
 ```json
 {
-  "environment": "production",
-  "api_keys": {
-    "production": "cc_live_xxx",
-    "development": null
-  },
-  "servers": {
-    "production": "https://clawdtalk.com",
-    "development": "https://dev.clawdtalk.com"
-  },
+  "api_key": "cc_live_xxx",
+  "server": "https://clawdtalk.com",
   "voice_agent_model": "anthropic/claude-sonnet-4-20250514"
 }
 ```
 
 | Option | Description |
 |--------|-------------|
-| `environment` | `production` (default) or `development` |
-| `api_keys.*` | API keys for each environment |
+| `api_key` | Your API key from clawdtalk.com |
+| `server` | ClawdTalk server URL (default: `https://clawdtalk.com`) |
 | `voice_agent_model` | Model for voice responses |
 
 ## How It Works

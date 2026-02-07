@@ -53,8 +53,8 @@ Edit `skill-config.json`:
 
 | Option | Description |
 |--------|-------------|
-| `environment` | `production` or `development` |
-| `api_keys.production` | API key from clawdtalk.com |
+| `api_key` | API key from clawdtalk.com |
+| `server` | Server URL (default: `https://clawdtalk.com`) |
 | `voice_agent_model` | Model for voice responses |
 
 ## Troubleshooting
