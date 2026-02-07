@@ -180,7 +180,7 @@ echo "💾 Creating skill configuration..."
 
 # Build the API key value
 if [ -n "$use_env_var" ]; then
-    api_key_json='"\${CLAWDTALK_API_KEY}"'
+    api_key_json='"${CLAWDTALK_API_KEY}"'
 elif [ -n "$api_key" ]; then
     api_key_json="\"$api_key\""
 else
