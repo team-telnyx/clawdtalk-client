@@ -104,6 +104,12 @@ start_connection() {
     
     echo "🚀 Starting WebSocket connection..."
     
+    # Source .env files for environment variable resolution
+    # Supports both OpenClaw and Clawdbot paths
+    [ -f "$HOME/.openclaw/.env" ] && . "$HOME/.openclaw/.env"
+    [ -f "$HOME/.clawdbot/.env" ] && . "$HOME/.clawdbot/.env"
+    [ -f "$SKILL_DIR/.env" ] && . "$SKILL_DIR/.env"
+    
     # Rotate log if it's too big (> 1MB)
     if [ -f "$LOG_FILE" ] && [ $(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE" 2>/dev/null || echo 0) -gt 1048576 ]; then
         echo "🔄 Rotating large log file..."

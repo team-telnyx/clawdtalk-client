@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ClawdTalk WebSocket Client v1.1
+ * ClawdTalk WebSocket Client v1.1.1
  * 
  * Connects to ClawdTalk server and routes voice calls to your Clawdbot gateway.
  * Phone → STT → Gateway Agent → TTS → Phone
@@ -9,6 +9,20 @@
 const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
+
+/**
+ * Resolve ${ENV_VAR} references in config values.
+ * Returns the original value if the env var is not set.
+ */
+function resolveEnvVar(value) {
+  if (typeof value !== 'string') return value;
+  const match = value.match(/^\$\{([A-Z_][A-Z0-9_]*)\}$/);
+  if (match) {
+    const envVal = process.env[match[1]];
+    return envVal !== undefined ? envVal : value;
+  }
+  return value;
+}
 
 const SKILL_DIR = path.dirname(__dirname);
 const CONFIG_FILE = path.join(SKILL_DIR, 'skill-config.json');
@@ -59,7 +73,7 @@ function loadGatewayConfig() {
       if (fs.existsSync(CLAWDBOT_CONFIG_PATHS[i])) {
         var config = JSON.parse(fs.readFileSync(CLAWDBOT_CONFIG_PATHS[i], 'utf8'));
         var port = (config.gateway && config.gateway.port) || 18789;
-        var token = (config.gateway && config.gateway.auth && config.gateway.auth.token) || '';
+        var token = resolveEnvVar((config.gateway && config.gateway.auth && config.gateway.auth.token) || '');
         
         // Find the main agent ID (first agent or one marked default)
         var mainAgentId = 'main';
@@ -157,6 +171,10 @@ class ClawdTalkClient {
   loadConfig() {
     try {
       this.config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+      
+      // Resolve env var references in key config values
+      this.config.api_key = resolveEnvVar(this.config.api_key);
+      this.config.server = resolveEnvVar(this.config.server);
       
       // Command line override takes precedence
       if (this.args.serverOverride) {

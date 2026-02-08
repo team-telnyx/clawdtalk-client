@@ -103,6 +103,38 @@ Missions dispatch AI assistants to make calls or send SMS to a list of targets:
 | `api_key` | Your API key from clawdtalk.com |
 | `server` | ClawdTalk server URL (default: `https://clawdtalk.com`) |
 
+### Environment Variable Support
+
+Instead of storing credentials in plaintext, you can use `${ENV_VAR}` references:
+
+```json
+{
+  "api_key": "${CLAWDTALK_API_KEY}",
+  "server": "https://clawdtalk.com"
+}
+```
+
+Then set the variable in one of these locations (checked in order):
+- `~/.openclaw/.env`
+- `~/.clawdbot/.env`
+- `<skill-dir>/.env`
+
+Example `.env` file:
+```bash
+CLAWDTALK_API_KEY=cc_live_xxx
+```
+
+The gateway auth token in `openclaw.json`/`clawdbot.json` also supports this:
+```json
+{
+  "gateway": {
+    "auth": {
+      "token": "${GATEWAY_TOKEN}"
+    }
+  }
+}
+```
+
 ## How It Works
 
 **Voice:** Phone calls connect via Telnyx to the ClawdTalk server. The WebSocket client (`ws-client.js`) routes transcribed speech to your gateway's `/v1/chat/completions` endpoint. Your bot processes it like any other message — same tools, same context. The response is converted to speech and played back.
