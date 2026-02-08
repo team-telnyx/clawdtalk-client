@@ -1,6 +1,6 @@
 ---
 name: clawdtalk-client
-version: 1.1.2
+version: 1.2.2
 description: ClawdTalk — Voice calls and SMS for Clawdbot
 metadata: {"clawdbot":{"emoji":"📞","requires":{"bins":["bash","node","jq"]}}}
 ---
@@ -27,6 +27,17 @@ The WebSocket client routes calls to your gateway's main agent session, giving f
 ./scripts/connect.sh status    # Check status
 ```
 
+### Outbound Calls
+
+Have the bot call you:
+
+```bash
+./scripts/call.sh                    # Call with default greeting
+./scripts/call.sh "Hey, what's up?"  # Call with custom greeting
+./scripts/call.sh status <call_id>   # Check call status
+./scripts/call.sh end <call_id>      # End call
+```
+
 ## SMS
 
 Send and receive text messages:
@@ -35,16 +46,6 @@ Send and receive text messages:
 ./scripts/sms.sh send +15551234567 "Hello!"
 ./scripts/sms.sh list
 ./scripts/sms.sh conversations
-```
-
-## Missions
-
-Dispatch AI assistants to make calls or send SMS on your behalf:
-
-```bash
-./scripts/missions.sh create '{"name": "...", "instructions": "...", "targets": [...]}'
-./scripts/missions.sh list
-./scripts/missions.sh status <id>
 ```
 
 ## Configuration

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.2
+- **Outbound calls**: New `call.sh` script to have your bot call you
+- **Missions removed**: Batch outreach feature disabled (not ready for production)
+- Updated docs and removed missions.sh
+
 ## 1.2.0
 - **SMS Reply Support**: Incoming SMS messages now route to your main agent session
 - Agent generates response and automatically sends reply via ClawdTalk

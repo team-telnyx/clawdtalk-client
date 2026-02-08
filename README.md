@@ -8,7 +8,6 @@ Powered by [Telnyx](https://telnyx.com).
 
 - **Voice calls** — Real-time conversations with your bot via phone
 - **SMS messaging** — Send and receive text messages
-- **Missions** — Dispatch AI assistants to make calls on your behalf
 - **Tool integration** — Your bot's full capabilities, accessible by voice
 
 ## Requirements
@@ -54,6 +53,17 @@ Start the connection, then call your ClawdTalk number:
 @reboot cd ~/clawd/skills/clawdtalk-client && ./scripts/connect.sh start
 ```
 
+### Outbound Calls
+
+Have the bot call you:
+
+```bash
+./scripts/call.sh                    # Call with default greeting
+./scripts/call.sh "Hey, what's up?"  # Custom greeting
+./scripts/call.sh status <call_id>   # Check status
+./scripts/call.sh end <call_id>      # End call
+```
+
 ### SMS
 
 ```bash
@@ -62,29 +72,6 @@ Start the connection, then call your ClawdTalk number:
 ./scripts/sms.sh list
 ./scripts/sms.sh list --contact +15551234567
 ./scripts/sms.sh conversations
-```
-
-### Missions
-
-Missions dispatch AI assistants to make calls or send SMS to a list of targets:
-
-```bash
-# Create a mission
-./scripts/missions.sh create '{
-  "name": "Get quotes",
-  "instructions": "Call and ask about pricing and availability.",
-  "targets": [
-    {"name": "ABC Corp", "phone": "+15551234567"},
-    {"name": "XYZ Inc", "phone": "+15559876543"}
-  ],
-  "channel": "voice"
-}'
-
-# Monitor
-./scripts/missions.sh list
-./scripts/missions.sh status <mission_id>
-./scripts/missions.sh events <mission_id>
-./scripts/missions.sh cancel <mission_id>
 ```
 
 ## Configuration
@@ -140,8 +127,6 @@ The gateway auth token in `openclaw.json`/`clawdbot.json` also supports this:
 **Voice:** Phone calls connect via Telnyx to the ClawdTalk server. The WebSocket client (`ws-client.js`) routes transcribed speech to your gateway's `/v1/chat/completions` endpoint. Your bot processes it like any other message — same tools, same context. The response is converted to speech and played back.
 
 **SMS:** Messages route through the ClawdTalk API. Inbound messages can trigger your bot via webhooks.
-
-**Missions:** You define targets and instructions. ClawdTalk creates a Telnyx AI Assistant that makes the calls, following your script.
 
 ## Troubleshooting
 
