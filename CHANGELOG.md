@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0
+- **SMS Reply Support**: Incoming SMS messages now route to your main agent session
+- Agent generates response and automatically sends reply via ClawdTalk
+- SMS replies truncated to fit SMS limits
+
 ## 1.1.0
 - Deep tool requests now route to main agent session for full context/memory access
 - Auto-detect owner and agent names from USER.md and IDENTITY.md
