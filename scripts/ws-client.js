@@ -202,6 +202,11 @@ class ClawdTalkClient {
       }
 
       if (!this.config.api_key) throw new Error('No API key configured');
+      
+      // Store for later use (SMS replies, etc)
+      this.apiKey = this.config.api_key;
+      this.baseUrl = this.config.server;
+      
       this.log('INFO', 'Config loaded -> ' + this.config.server);
     } catch (err) {
       this.log('ERROR', 'Config: ' + err.message);
@@ -394,6 +399,18 @@ class ClawdTalkClient {
       return;
     }
 
+    // Handle SMS received - forward to bot and send reply
+    if (event === 'sms.received') {
+      var smsFrom = msg.from;
+      var smsBody = msg.body || '';
+      var messageId = msg.message_id;
+      this.log('INFO', 'SMS received from ' + (smsFrom ? smsFrom.substring(0, 6) + '***' : 'unknown') + ': ' + smsBody.substring(0, 50));
+      
+      // Process via Clawdbot and send reply
+      this.handleInboundSms(smsFrom, smsBody, messageId);
+      return;
+    }
+
     // Log unhandled events for debugging
     if (process.env.DEBUG) {
       this.log('DEBUG', 'Unhandled event: ' + event);
@@ -496,6 +513,80 @@ class ClawdTalkClient {
       }));
     } catch (err) {
       this.log('ERROR', 'Failed to send deep tool result: ' + err.message);
+    }
+  }
+
+  // ── SMS Handler ─────────────────────────────────────────────
+
+  async handleInboundSms(fromNumber, body, messageId) {
+    try {
+      // Route SMS to main session via sessions_send
+      var smsPrefix = '[SMS from ' + fromNumber + '] Reply concisely (under 300 chars). No markdown. ';
+      
+      var mainSessionKey = 'agent:' + this.mainAgentId + ':main';
+      
+      var response = await fetch(this.gatewayToolsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + this.gatewayToken
+        },
+        body: JSON.stringify({
+          tool: 'sessions_send',
+          args: {
+            sessionKey: mainSessionKey,
+            message: smsPrefix + body,
+            timeoutSeconds: 60
+          }
+        }),
+        signal: AbortSignal.timeout(90000)
+      });
+      
+      if (!response.ok) {
+        this.log('ERROR', 'SMS agent request failed: ' + response.status);
+        return;
+      }
+      
+      var result = await response.json();
+      var reply = result.result || result.response || '';
+      
+      if (!reply) {
+        this.log('WARN', 'No reply from agent for SMS');
+        return;
+      }
+      
+      // Truncate reply for SMS
+      if (reply.length > 1500) {
+        reply = reply.substring(0, 1497) + '...';
+      }
+      
+      this.log('INFO', 'SMS reply: ' + reply.substring(0, 50) + '...');
+      
+      // Send reply via ClawdTalk API
+      var sendResponse = await fetch(this.baseUrl + '/v1/messages/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + this.apiKey
+        },
+        body: JSON.stringify({
+          to: fromNumber,
+          message: reply
+        })
+      });
+      
+      if (sendResponse.ok) {
+        this.log('INFO', 'SMS reply sent to ' + fromNumber.substring(0, 6) + '***');
+      } else {
+        var errText = await sendResponse.text();
+        this.log('ERROR', 'Failed to send SMS reply: ' + errText);
+      }
+    } catch (err) {
+      if (err.name === 'TimeoutError') {
+        this.log('WARN', 'SMS agent timed out');
+      } else {
+        this.log('ERROR', 'SMS handler error: ' + err.message);
+      }
     }
   }
 
