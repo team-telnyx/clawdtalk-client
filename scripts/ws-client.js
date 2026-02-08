@@ -68,6 +68,10 @@ DRIP PROGRESS UPDATES:
 - Don't wait until the end to summarize — drip information as you find it.`;
 
 function loadGatewayConfig() {
+  // Collect config from all paths, prioritizing ones with valid tokens
+  var bestConfig = null;
+  var configWithToken = null;
+  
   for (var i = 0; i < CLAWDBOT_CONFIG_PATHS.length; i++) {
     try {
       if (fs.existsSync(CLAWDBOT_CONFIG_PATHS[i])) {
@@ -82,15 +86,28 @@ function loadGatewayConfig() {
           mainAgentId = defaultAgent ? defaultAgent.id : config.agents.list[0].id;
         }
         
-        return { 
+        var result = { 
           chatUrl: 'http://127.0.0.1:' + port + '/v1/chat/completions',
           toolsUrl: 'http://127.0.0.1:' + port + '/tools/invoke',
           token: token,
           mainAgentId: mainAgentId
         };
+        
+        // Keep first config as fallback
+        if (!bestConfig) bestConfig = result;
+        
+        // If this config has a token, use it immediately
+        if (token) {
+          configWithToken = result;
+          break;
+        }
       }
     } catch (e) {}
   }
+  
+  // Return config with token, or best available, or defaults
+  if (configWithToken) return configWithToken;
+  if (bestConfig) return bestConfig;
   var defaultPort = 18789;
   return {
     chatUrl: process.env.CLAWDBOT_GATEWAY_URL || 'http://127.0.0.1:' + defaultPort + '/v1/chat/completions',
