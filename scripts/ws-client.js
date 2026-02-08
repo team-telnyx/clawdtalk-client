@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ClawdTalk WebSocket Client v1.1.1
+ * ClawdTalk WebSocket Client v1.2.0
  * 
  * Connects to ClawdTalk server and routes voice calls to your Clawdbot gateway.
  * Phone → STT → Gateway Agent → TTS → Phone
@@ -294,7 +294,7 @@ class ClawdTalkClient {
     }
 
     if (msg.type === 'auth_ok') {
-      this.log('INFO', 'Authenticated (v1.1 agentic mode)');
+      this.log('INFO', 'Authenticated (v1.2 agentic mode)');
       this.reconnectAttempts = 0;
       this.currentReconnectDelay = RECONNECT_DELAY_MIN;
       this.startPing();
@@ -915,7 +915,7 @@ class ClawdTalkClient {
 
   start() {
     this.log('INFO', '═══════════════════════════════════════════════');
-    this.log('INFO', 'ClawdTalk WebSocket Client v1.1');
+    this.log('INFO', 'ClawdTalk WebSocket Client v1.2');
     this.log('INFO', 'Full agentic mode with main session routing');
     this.log('INFO', '═══════════════════════════════════════════════');
     this.log('INFO', 'Chat endpoint: ' + this.gatewayChatUrl);
