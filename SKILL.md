@@ -1,6 +1,6 @@
 ---
 name: clawdtalk-client
-version: 1.1.1
+version: 1.1.2
 description: ClawdTalk — Voice calls and SMS for Clawdbot
 metadata: {"clawdbot":{"emoji":"📞","requires":{"bins":["bash","node","jq"]}}}
 ---
