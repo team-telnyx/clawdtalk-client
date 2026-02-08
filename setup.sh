@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# ClawdTalk - Setup Script (v1.0)
+# ClawdTalk - Setup Script (v1.1)
 #
 # Interactive setup for voice calling integration.
-# Asks for API key, model preference, and auto-configures the gateway.
+# Asks for API key, auto-detects names, and configures the gateway.
 # Uses jq for all JSON manipulation (no python3 dependency).
 #
 # Usage: ./setup.sh
@@ -93,21 +93,21 @@ if [ -z "$CLI_NAME" ]; then
 fi
 
 voice_agent_added=false
+main_agent_workspace=""
 
 if [ -n "$GATEWAY_CONFIG" ] && [ -f "$GATEWAY_CONFIG" ]; then
     # Check if voice agent already exists (using jq)
     has_voice=$(jq -r '[.agents.list[]? | select(.id == "voice")] | length > 0' "$GATEWAY_CONFIG" 2>/dev/null || echo "false")
 
+    # Read the main agent's name and workspace using jq
+    main_agent_name=$(jq -r '(.agents.list[]? | select(.default == true or .id == "main") | .name) // "Assistant"' "$GATEWAY_CONFIG" 2>/dev/null || echo "Assistant")
+    main_agent_workspace=$(jq -r '(.agents.list[]? | select(.default == true or .id == "main") | .workspace) // .agents.defaults.workspace // "/home/node/clawd"' "$GATEWAY_CONFIG" 2>/dev/null || echo "/home/node/clawd")
+
     if [ "$has_voice" = "true" ]; then
         echo "   ✓ Voice agent already configured in gateway"
         voice_agent_added=true
     else
-        # Read the main agent's name and workspace using jq
-        main_agent_name=$(jq -r '(.agents.list[]? | select(.default == true or .id == "main") | .name) // "Assistant"' "$GATEWAY_CONFIG" 2>/dev/null || echo "Assistant")
-        main_agent_workspace=$(jq -r '(.agents.list[]? | select(.default == true or .id == "main") | .workspace) // .agents.defaults.workspace // "/home/node/clawd"' "$GATEWAY_CONFIG" 2>/dev/null || echo "/home/node/clawd")
-
         # Build the voice agent object (no systemPrompt — injected by ws-client via messages)
-        # Keeping it minimal for compatibility with both Clawdbot and OpenClaw
         voice_agent=$(jq -n \
             --arg name "${main_agent_name} Voice" \
             --arg workspace "$main_agent_workspace" \
@@ -118,7 +118,6 @@ if [ -n "$GATEWAY_CONFIG" ] && [ -f "$GATEWAY_CONFIG" ]; then
             }')
 
         # Add voice agent to agents.list and enable chatCompletions endpoint
-        # Use a temp file for atomic write
         tmp_config=$(mktemp)
         if jq --argjson agent "$voice_agent" '
             .agents.list = (.agents.list // []) + [$agent] |
@@ -155,21 +154,78 @@ else
     echo "   ⚠️  No package.json found"
 fi
 
+# Detect user and agent names from workspace files
+echo ""
+echo "👤 Detecting names from workspace..."
+
+WORKSPACE="${main_agent_workspace:-$HOME/.openclaw/workspace}"
+owner_name=""
+agent_name=""
+
+# Try to get owner name from USER.md ("What to call them:" or "Name:")
+if [ -f "$WORKSPACE/USER.md" ]; then
+    # First try "What to call them:" for the preferred name
+    owner_name=$(grep -i "what to call them:" "$WORKSPACE/USER.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
+    # Fall back to "Name:" if not found
+    if [ -z "$owner_name" ]; then
+        owner_name=$(grep -i "^- \*\*Name:" "$WORKSPACE/USER.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
+        # Extract first name only
+        owner_name=$(echo "$owner_name" | awk '{print $1}')
+    fi
+fi
+
+# Try to get agent name from IDENTITY.md
+if [ -f "$WORKSPACE/IDENTITY.md" ]; then
+    agent_name=$(grep -i "^- \*\*Name:" "$WORKSPACE/IDENTITY.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
+fi
+
+if [ -n "$owner_name" ]; then
+    echo "   ✓ Owner name: $owner_name"
+else
+    echo "   ⚠️  Could not detect owner name from USER.md"
+fi
+
+if [ -n "$agent_name" ]; then
+    echo "   ✓ Agent name: $agent_name"
+else
+    echo "   ⚠️  Could not detect agent name from IDENTITY.md"
+fi
+
 # Create skill-config.json
 echo ""
 echo "💾 Creating skill configuration..."
 
-# Build the API key value
+# Build values
 if [ -n "$api_key" ]; then
     api_key_json="\"$api_key\""
 else
     api_key_json="null"
 fi
 
+owner_name_json="null"
+agent_name_json="null"
+if [ -n "$owner_name" ]; then
+    owner_name_json="\"$owner_name\""
+fi
+if [ -n "$agent_name" ]; then
+    agent_name_json="\"$agent_name\""
+fi
+
+# Build greeting with name if available
+if [ -n "$owner_name" ]; then
+    greeting="Hey $owner_name, what's up?"
+else
+    greeting="Hey, what's up?"
+fi
+
 cat > "$CONFIG_FILE" << EOF
 {
   "api_key": $api_key_json,
-  "server": "https://clawdtalk.com"
+  "server": "https://clawdtalk.com",
+  "owner_name": $owner_name_json,
+  "agent_name": $agent_name_json,
+  "greeting": "$greeting",
+  "max_conversation_turns": 20
 }
 EOF
 
@@ -214,7 +270,7 @@ else
         config_path="~/.openclaw/openclaw.json"
     fi
     echo "   Edit $config_path and add to agents.list[]:"
-    echo '   { "id": "voice", "name": "Voice", "systemPrompt": "You are a voice assistant. Keep responses short." }'
+    echo '   { "id": "voice", "name": "Voice" }'
     echo ""
     echo "   Also ensure chatCompletions is enabled:"
     echo '   "gateway": { "http": { "endpoints": { "chatCompletions": { "enabled": true } } } }'
@@ -223,8 +279,8 @@ else
 fi
 
 echo ""
-echo "📋 Tools: The voice agent uses the same tools as your gateway agent."
-echo "   Add skills to the voice agent's workspace to give it capabilities."
+echo "📋 Voice calls will use your main agent's full context and memory."
+echo "   All tools available to your agent work on voice calls too."
 echo ""
 echo "To check status: ./status.sh"
 echo ""

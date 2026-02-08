@@ -1,6 +1,6 @@
 ---
 name: clawdtalk-client
-version: 1.0.0
+version: 1.1.0
 description: ClawdTalk — Voice calls and SMS for Clawdbot
 metadata: {"clawdbot":{"emoji":"📞","requires":{"bins":["bash","node","jq"]}}}
 ---
@@ -19,7 +19,7 @@ Voice calling and SMS messaging for Clawdbot. Call your bot by phone or send tex
 
 ## Voice Calls
 
-The WebSocket client routes calls to your gateway's `/v1/chat/completions` endpoint. Your bot answers the phone and can use all its tools.
+The WebSocket client routes calls to your gateway's main agent session, giving full access to memory, tools, and context.
 
 ```bash
 ./scripts/connect.sh start     # Start connection
@@ -55,9 +55,13 @@ Edit `skill-config.json`:
 |--------|-------------|
 | `api_key` | API key from clawdtalk.com |
 | `server` | Server URL (default: `https://clawdtalk.com`) |
+| `owner_name` | Your name (auto-detected from USER.md) |
+| `agent_name` | Agent name (auto-detected from IDENTITY.md) |
+| `greeting` | Custom greeting for inbound calls |
 
 ## Troubleshooting
 
 - **Auth failed**: Regenerate API key at clawdtalk.com
 - **Empty responses**: Run `./setup.sh` and restart gateway
+- **Slow responses**: Try a faster model in your gateway config
 - **Debug mode**: `DEBUG=1 ./scripts/connect.sh restart`

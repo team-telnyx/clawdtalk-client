@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ClawdTalk WebSocket Client
+ * ClawdTalk WebSocket Client v1.1
  * 
  * Connects to ClawdTalk server and routes voice calls to your Clawdbot gateway.
  * Phone → STT → Gateway Agent → TTS → Phone
@@ -16,7 +16,7 @@ const CONFIG_FILE = path.join(SKILL_DIR, 'skill-config.json');
 // Reconnection with exponential backoff
 const RECONNECT_DELAY_MIN = 5000;
 const RECONNECT_DELAY_MAX = 180000;
-const DEFAULT_GREETING = "Hey, this is your assistant. How can I help?";
+const DEFAULT_GREETING = "Hey, what's up?";
 
 // Transcription filtering and debouncing
 const MIN_TRANSCRIPT_LENGTH = 2;
@@ -34,7 +34,7 @@ const CLAWDBOT_CONFIG_PATHS = [
   '/home/node/.openclaw/openclaw.json',
 ];
 
-// Default voice context
+// Default voice context with drip progress updates
 const DEFAULT_VOICE_CONTEXT = `[VOICE CALL ACTIVE] Voice call in progress. Speech is transcribed to text. Your response is converted to speech via TTS.
 
 VOICE RULES:
@@ -44,8 +44,14 @@ VOICE RULES:
 - Numbers: say naturally ("fifteen hundred" not "1,500").
 - Don't repeat back what the caller said.
 - You have FULL tool access: Slack, memory, web search, etc. Use them when needed.
-- After using a tool, give a brief spoken confirmation of what you did.
-- NEVER output raw JSON, function calls, or code. Everything you say will be spoken aloud.`;
+- NEVER output raw JSON, function calls, or code. Everything you say will be spoken aloud.
+
+DRIP PROGRESS UPDATES:
+- The caller is waiting on the phone. Keep them informed with brief progress updates.
+- After each tool call or significant step, respond with a SHORT update: "Checking Slack now...", "Found 3 messages, reading through them...", "Pulling up the PR details..."
+- Be specific about what you're doing, not generic. "Looking at your calendar" not "Processing..."
+- These updates are spoken aloud immediately, so they fill silence while you work.
+- Don't wait until the end to summarize — drip information as you find it.`;
 
 function loadGatewayConfig() {
   for (var i = 0; i < CLAWDBOT_CONFIG_PATHS.length; i++) {
@@ -54,10 +60,19 @@ function loadGatewayConfig() {
         var config = JSON.parse(fs.readFileSync(CLAWDBOT_CONFIG_PATHS[i], 'utf8'));
         var port = (config.gateway && config.gateway.port) || 18789;
         var token = (config.gateway && config.gateway.auth && config.gateway.auth.token) || '';
+        
+        // Find the main agent ID (first agent or one marked default)
+        var mainAgentId = 'main';
+        if (config.agents && config.agents.list && config.agents.list.length > 0) {
+          var defaultAgent = config.agents.list.find(function(a) { return a.default; });
+          mainAgentId = defaultAgent ? defaultAgent.id : config.agents.list[0].id;
+        }
+        
         return { 
           chatUrl: 'http://127.0.0.1:' + port + '/v1/chat/completions',
           toolsUrl: 'http://127.0.0.1:' + port + '/tools/invoke',
-          token: token 
+          token: token,
+          mainAgentId: mainAgentId
         };
       }
     } catch (e) {}
@@ -67,7 +82,20 @@ function loadGatewayConfig() {
     chatUrl: process.env.CLAWDBOT_GATEWAY_URL || 'http://127.0.0.1:' + defaultPort + '/v1/chat/completions',
     toolsUrl: 'http://127.0.0.1:' + defaultPort + '/tools/invoke',
     token: process.env.CLAWDBOT_GATEWAY_TOKEN || '',
+    mainAgentId: 'main'
   };
+}
+
+// Parse command line args for server override
+function parseArgs() {
+  var args = process.argv.slice(2);
+  var serverOverride = null;
+  for (var i = 0; i < args.length; i++) {
+    if (args[i] === '--server' && args[i + 1]) {
+      serverOverride = args[i + 1];
+    }
+  }
+  return { serverOverride: serverOverride };
 }
 
 class ClawdTalkClient {
@@ -82,6 +110,7 @@ class ClawdTalkClient {
     this.pendingRequests = new Map();
     this.transcriptionDebounce = new Map();
     this.queuedTranscriptions = new Map();
+    this.args = parseArgs();
 
     // Exponential backoff for reconnection
     this.reconnectAttempts = 0;
@@ -92,9 +121,14 @@ class ClawdTalkClient {
     this.gatewayToolsUrl = null;
     this.gatewayToken = null;
     this.gatewayAgent = 'voice';
+    this.mainAgentId = 'main';
     this.voiceContext = DEFAULT_VOICE_CONTEXT;
     this.maxConversationTurns = 20;
     this.greeting = DEFAULT_GREETING;
+    
+    // Personalization
+    this.ownerName = null;
+    this.agentName = null;
 
     this.loadConfig();
     this.loadSkillConfig();
@@ -124,8 +158,11 @@ class ClawdTalkClient {
     try {
       this.config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
       
-      // Use server field, default to clawdtalk.com
-      if (!this.config.server) {
+      // Command line override takes precedence
+      if (this.args.serverOverride) {
+        this.config.server = this.args.serverOverride;
+        this.log('INFO', 'Server override: ' + this.config.server);
+      } else if (!this.config.server) {
         this.config.server = 'https://clawdtalk.com';
       }
 
@@ -142,13 +179,29 @@ class ClawdTalkClient {
     this.gatewayChatUrl = gwConfig.chatUrl;
     this.gatewayToolsUrl = gwConfig.toolsUrl;
     this.gatewayToken = gwConfig.token;
+    this.mainAgentId = gwConfig.mainAgentId;
 
     if (this.config.max_conversation_turns) {
       this.maxConversationTurns = this.config.max_conversation_turns;
     }
     this.greeting = this.config.greeting || DEFAULT_GREETING;
+    
+    // Load names for voice context
+    this.ownerName = this.config.owner_name || null;
+    this.agentName = this.config.agent_name || null;
+    
+    // Inject names into voice context if available
+    if (this.ownerName || this.agentName) {
+      var nameContext = '\n\nIDENTITY:';
+      if (this.agentName) nameContext += '\n- Your name is ' + this.agentName + '.';
+      if (this.ownerName) nameContext += '\n- You are speaking with ' + this.ownerName + '. Use their name naturally in conversation.';
+      this.voiceContext += nameContext;
+    }
 
+    if (this.ownerName) this.log('INFO', 'Owner: ' + this.ownerName);
+    if (this.agentName) this.log('INFO', 'Agent: ' + this.agentName);
     this.log('INFO', 'Gateway: ' + this.gatewayChatUrl);
+    this.log('INFO', 'Main agent: ' + this.mainAgentId);
   }
 
   log(level, msg) {
@@ -181,7 +234,14 @@ class ClawdTalkClient {
 
   onOpen() {
     this.log('INFO', 'Connected, authenticating...');
-    this.ws.send(JSON.stringify({ type: 'auth', api_key: this.config.api_key }));
+    // Send auth with optional name info for assistant personalization
+    var authMsg = { 
+      type: 'auth', 
+      api_key: this.config.api_key 
+    };
+    if (this.ownerName) authMsg.owner_name = this.ownerName;
+    if (this.agentName) authMsg.agent_name = this.agentName;
+    this.ws.send(JSON.stringify(authMsg));
   }
 
   async onMessage(data) {
@@ -189,10 +249,12 @@ class ClawdTalkClient {
     try { msg = JSON.parse(data.toString()); } catch (e) { return; }
 
     // Debug: log all incoming messages
-    this.log('DEBUG', 'WS msg: ' + JSON.stringify(msg).substring(0, 300));
+    if (process.env.DEBUG) {
+      this.log('DEBUG', 'WS msg: ' + JSON.stringify(msg).substring(0, 300));
+    }
 
     if (msg.type === 'auth_ok') {
-      this.log('INFO', 'Authenticated (v1.0 agentic mode)');
+      this.log('INFO', 'Authenticated (v1.1 agentic mode)');
       this.reconnectAttempts = 0;
       this.currentReconnectDelay = RECONNECT_DELAY_MIN;
       this.startPing();
@@ -298,81 +360,81 @@ class ClawdTalkClient {
     }
 
     // Log unhandled events for debugging
-    this.log('DEBUG', 'Unhandled event: ' + event);
+    if (process.env.DEBUG) {
+      this.log('DEBUG', 'Unhandled event: ' + event);
+    }
   }
 
   // ── Deep Tool Handler ───────────────────────────────────────
 
   async handleDeepToolRequest(callId, requestId, query, context) {
-    // Send progress update
-    this.sendDeepToolProgress(requestId, 'Processing your request...');
-
     try {
-      // Use non-streaming chat completion for tool support
-      var messages = [
-        { role: 'system', content: this.voiceContext + '\n\nContext from call: ' + JSON.stringify(context) },
-        { role: 'user', content: query }
-      ];
-
-      var loopCount = 0;
-      var finalContent = null;
-
-      while (loopCount < MAX_TOOL_LOOPS) {
-        loopCount++;
-        
-        var response = await this.chatCompletion(callId, messages);
-        
-        if (!response) {
-          this.log('ERROR', 'No response from gateway for deep tool');
-          finalContent = "Sorry, I couldn't process that request.";
-          break;
-        }
-
-        var choice = response.choices && response.choices[0];
-        if (!choice) {
-          finalContent = "Sorry, something went wrong.";
-          break;
-        }
-
-        var message = choice.message;
-        
-        // Check for tool calls
-        if (message.tool_calls && message.tool_calls.length > 0) {
-          this.log('INFO', 'Deep tool: executing ' + message.tool_calls.length + ' tool(s)');
-          this.sendDeepToolProgress(requestId, 'Working on it...');
-          
-          messages.push({
-            role: 'assistant',
-            content: message.content || null,
-            tool_calls: message.tool_calls
-          });
-
-          for (var i = 0; i < message.tool_calls.length; i++) {
-            var toolCall = message.tool_calls[i];
-            var toolResult = await this.executeTool(toolCall);
-            
-            messages.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(toolResult)
-            });
+      // Route to main session via tools/invoke sessions_send - uses full agent context/memory
+      var voicePrefix = '[VOICE CALL] Respond concisely for speech. No markdown, no lists, no URLs. ';
+      
+      // Use the main agent session - format: agent:{agentId}:main
+      var mainSessionKey = 'agent:' + this.mainAgentId + ':main';
+      
+      var response = await fetch(this.gatewayToolsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + this.gatewayToken
+        },
+        body: JSON.stringify({
+          tool: 'sessions_send',
+          args: {
+            sessionKey: mainSessionKey,
+            message: voicePrefix + query,
+            timeoutSeconds: 90
           }
-          
-          continue;
-        }
-
-        finalContent = message.content || '';
-        break;
+        }),
+        signal: AbortSignal.timeout(120000)
+      });
+      
+      if (!response.ok) {
+        var errText = await response.text();
+        this.log('ERROR', 'sessions_send failed: ' + response.status + ' ' + errText);
+        this.sendDeepToolResult(requestId, 'Sorry, I had trouble reaching the agent.');
+        return;
       }
-
-      // Send final result
-      var cleanedResult = this.cleanForVoice(finalContent || 'Done.');
+      
+      var result = await response.json();
+      
+      // Extract reply from the nested response structure
+      var reply = '';
+      if (result.result && result.result.details && result.result.details.reply) {
+        reply = result.result.details.reply;
+      } else if (result.result && result.result.content) {
+        // Try to parse from content array
+        var content = result.result.content;
+        if (Array.isArray(content) && content[0] && content[0].text) {
+          try {
+            var parsed = JSON.parse(content[0].text);
+            reply = parsed.reply || '';
+          } catch (e) {
+            reply = content[0].text;
+          }
+        }
+      }
+      
+      if (!reply || reply === 'HEARTBEAT_OK') {
+        reply = 'Done.';
+      }
+      
+      // Clean for voice output
+      var cleanedResult = this.cleanForVoice(reply);
       this.sendDeepToolResult(requestId, cleanedResult);
       this.log('INFO', 'Deep tool complete [' + requestId + ']: ' + cleanedResult.substring(0, 100));
 
     } catch (err) {
-      this.log('ERROR', 'Deep tool failed: ' + err.message);
-      this.sendDeepToolResult(requestId, 'Sorry, I had trouble with that request.');
+      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+        this.log('ERROR', 'Deep tool timed out');
+        this.sendDeepToolResult(requestId, 'That took too long. Try asking again.');
+      } else {
+        this.log('ERROR', 'Deep tool failed: ' + err.message);
+        this.sendDeepToolResult(requestId, 'Sorry, I had trouble with that request.');
+      }
     }
   }
 
@@ -727,8 +789,8 @@ class ClawdTalkClient {
 
   start() {
     this.log('INFO', '═══════════════════════════════════════════════');
-    this.log('INFO', 'Clawd Talk WebSocket Client v1.0');
-    this.log('INFO', 'Full agentic mode with tool execution');
+    this.log('INFO', 'ClawdTalk WebSocket Client v1.1');
+    this.log('INFO', 'Full agentic mode with main session routing');
     this.log('INFO', '═══════════════════════════════════════════════');
     this.log('INFO', 'Chat endpoint: ' + this.gatewayChatUrl);
     this.log('INFO', 'Tools endpoint: ' + this.gatewayToolsUrl);
