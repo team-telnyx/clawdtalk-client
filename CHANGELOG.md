@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0
+- **New**: Log `call_control_id` from deep tool requests when present
+- Enables asking your agent "what was the call control ID of my last call?"
+- Backwards-compatible: works with servers that don't yet send the field
+
 ## 1.2.9
 - **Fix**: Use correct `/tools/invoke` endpoint for sessions_send
 - Previous version used non-existent `/v1/sessions/send` (405 error)
