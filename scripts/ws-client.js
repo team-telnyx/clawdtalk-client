@@ -151,7 +151,7 @@ class ClawdTalkClient {
     this.gatewayChatUrl = null;
     this.gatewayToolsUrl = null;
     this.gatewayToken = null;
-    this.gatewayAgent = 'voice';
+    this.gatewayAgent = 'main';
     this.mainAgentId = 'main';
     this.voiceContext = DEFAULT_VOICE_CONTEXT;
     this.maxConversationTurns = 20;
