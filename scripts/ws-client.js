@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ClawdTalk WebSocket Client v1.2.8
+ * ClawdTalk WebSocket Client v1.2.9
  * 
  * Connects to ClawdTalk server and routes voice calls to your Clawdbot gateway.
  * Phone → STT → Gateway Agent → TTS → Phone
@@ -294,7 +294,7 @@ class ClawdTalkClient {
     }
 
     if (msg.type === 'auth_ok') {
-      this.log('INFO', 'Authenticated (v1.2.8 agentic mode)');
+      this.log('INFO', 'Authenticated (v1.2.9 agentic mode)');
       this.reconnectAttempts = 0;
       this.currentReconnectDelay = RECONNECT_DELAY_MIN;
       this.startPing();
@@ -923,22 +923,26 @@ class ClawdTalkClient {
       summary = emoji + ' Call ended: ' + reason;
     }
     
-    // Use sessions_send to route to main persistent session
-    // Derive sessions endpoint from chat URL (replace /v1/chat/completions with /v1/sessions/send)
-    var sessionsUrl = this.gatewayChatUrl ? 
-      this.gatewayChatUrl.replace('/v1/chat/completions', '/v1/sessions/send') :
-      'http://localhost:18789/v1/sessions/send';
+    // Use /tools/invoke to call sessions_send tool
+    // Derive tools endpoint from chat URL (replace /v1/chat/completions with /tools/invoke)
+    var toolsInvokeUrl = this.gatewayChatUrl ? 
+      this.gatewayChatUrl.replace('/v1/chat/completions', '/tools/invoke') :
+      'http://localhost:18789/tools/invoke';
     
     try {
-      var response = await fetch(sessionsUrl, {
+      var response = await fetch(toolsInvokeUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + this.gatewayToken
         },
         body: JSON.stringify({
-          sessionKey: 'agent:main:main',  // Route to main persistent session
-          message: '[ClawdTalk] ' + summary
+          tool: 'sessions_send',
+          args: {
+            sessionKey: 'agent:main:main',  // Route to main persistent session
+            message: '[ClawdTalk] ' + summary,
+            timeoutSeconds: 0  // Fire and forget
+          }
         })
       });
       
@@ -1041,7 +1045,7 @@ class ClawdTalkClient {
 
   start() {
     this.log('INFO', '═══════════════════════════════════════════════');
-    this.log('INFO', 'ClawdTalk WebSocket Client v1.2.8');
+    this.log('INFO', 'ClawdTalk WebSocket Client v1.2.9');
     this.log('INFO', 'Full agentic mode with main session routing');
     this.log('INFO', '═══════════════════════════════════════════════');
     this.log('INFO', 'Chat endpoint: ' + this.gatewayChatUrl);

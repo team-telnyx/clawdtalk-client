@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.9
+- **Fix**: Use correct `/tools/invoke` endpoint for sessions_send
+- Previous version used non-existent `/v1/sessions/send` (405 error)
+
 ## 1.2.8
 - **Fix**: Use `sessions_send` to route call outcomes to main persistent session
 - Call reports now appear in your Telegram/Discord/etc. session instead of ephemeral sessions

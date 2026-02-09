@@ -1,6 +1,6 @@
 {
   "name": "clawdtalk-client",
-  "version": "1.2.8",
+  "version": "1.2.9",
   "description": "Voice calling and SMS for Clawdbot",
   "author": "Telnyx",
   "license": "MIT",
