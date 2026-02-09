@@ -394,8 +394,12 @@ class ClawdTalkClient {
     // Handle deep_tool_request (Voice AI asking for complex query via Clawdbot)
     if (event === 'deep_tool_request') {
       var requestId = msg.request_id;
+      var callControlId = msg.call_control_id || null;
       var query = msg.query || '';
       this.log('INFO', 'Deep tool request [' + requestId + ']: ' + query.substring(0, 100));
+      if (callControlId) {
+        this.log('INFO', 'Call control ID: ' + callControlId);
+      }
       
       // Process via full Clawdbot agent
       this.handleDeepToolRequest(callId, requestId, query, msg.context || {});
