@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ClawdTalk WebSocket Client v1.2.0
+ * ClawdTalk WebSocket Client v1.2.5
  * 
  * Connects to ClawdTalk server and routes voice calls to your Clawdbot gateway.
  * Phone → STT → Gateway Agent → TTS → Phone
@@ -294,7 +294,7 @@ class ClawdTalkClient {
     }
 
     if (msg.type === 'auth_ok') {
-      this.log('INFO', 'Authenticated (v1.2 agentic mode)');
+      this.log('INFO', 'Authenticated (v1.2.5 agentic mode)');
       this.reconnectAttempts = 0;
       this.currentReconnectDelay = RECONNECT_DELAY_MIN;
       this.startPing();
@@ -365,6 +365,9 @@ class ClawdTalkClient {
         this.transcriptionDebounce.delete(callId);
       }
       this.log('INFO', 'Call ended: ' + callId);
+      
+      // Report call outcome to user
+      this.reportCallOutcome(msg);
       return;
     }
 
@@ -864,11 +867,129 @@ class ClawdTalkClient {
     }
   }
 
+  /**
+   * Report call outcome to user via gateway
+   * Called when a call ends to summarize what happened
+   */
+  async reportCallOutcome(callEvent) {
+    if (!this.gatewayChatUrl || !this.gatewayToken) {
+      this.log('DEBUG', 'No gateway configured, skipping call report');
+      return;
+    }
+    
+    var direction = callEvent.direction || 'unknown';
+    var duration = callEvent.duration_seconds || 0;
+    var reason = callEvent.reason || 'unknown';
+    var outcome = callEvent.outcome;
+    var toNumber = callEvent.to_number;
+    var purpose = callEvent.purpose || callEvent.greeting;
+    var voicemailMessage = callEvent.voicemail_message;
+    
+    // Build human-readable summary
+    var summary = '';
+    var emoji = '📞';
+    
+    if (direction === 'outbound') {
+      var target = toNumber ? toNumber.replace(/(\+\d{1})(\d{3})(\d{3})(\d{4})/, '$1 ($2) $3-$4') : 'unknown number';
+      
+      if (outcome === 'voicemail') {
+        emoji = '📬';
+        summary = emoji + ' **Voicemail left** for ' + target;
+        if (voicemailMessage) {
+          summary += '\n> "' + voicemailMessage.substring(0, 200) + (voicemailMessage.length > 200 ? '...' : '') + '"';
+        }
+      } else if (outcome === 'voicemail_failed') {
+        emoji = '📵';
+        summary = emoji + ' Call to ' + target + ' went to voicemail but couldn\'t leave message (no beep detected)';
+      } else if (outcome === 'no_answer' || reason === 'amd_silence') {
+        emoji = '📵';
+        summary = emoji + ' Call to ' + target + ' - no answer (silence detected)';
+      } else if (outcome === 'fax') {
+        emoji = '📠';
+        summary = emoji + ' Call to ' + target + ' - fax machine detected, call ended';
+      } else if (reason === 'user_hangup') {
+        emoji = '✅';
+        summary = emoji + ' Call to ' + target + ' completed (' + this.formatDuration(duration) + ')';
+      } else {
+        summary = emoji + ' Call to ' + target + ' ended: ' + reason + ' (' + this.formatDuration(duration) + ')';
+      }
+      
+      if (purpose && outcome !== 'voicemail') {
+        summary += '\n📋 Purpose: ' + purpose.substring(0, 100);
+      }
+    } else if (direction === 'inbound') {
+      summary = emoji + ' Inbound call ended (' + this.formatDuration(duration) + ')';
+    } else {
+      summary = emoji + ' Call ended: ' + reason;
+    }
+    
+    // Send to gateway as a system message
+    try {
+      var response = await fetch(this.gatewayChatUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + this.gatewayToken,
+          'x-clawdbot-agent-id': this.gatewayAgent || 'voice'
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: '[ClawdTalk] ' + summary }],
+          stream: false
+        })
+      });
+      
+      if (response.ok) {
+        this.log('INFO', 'Call outcome reported to user');
+      } else {
+        this.log('WARN', 'Failed to report call outcome: ' + response.status);
+      }
+    } catch (err) {
+      this.log('ERROR', 'Failed to report call outcome: ' + err.message);
+    }
+  }
+  
+  formatDuration(seconds) {
+    if (!seconds || seconds < 1) return '0s';
+    if (seconds < 60) return seconds + 's';
+    var mins = Math.floor(seconds / 60);
+    var secs = seconds % 60;
+    return mins + 'm ' + secs + 's';
+  }
+
   // ── Connection Management ───────────────────────────────────
 
   onClose(code) {
-    this.log('WARN', 'WS closed: ' + code);
+    var closeReason = code === 4000 ? ' ← Server killing connection (duplicate client?)' : '';
+    this.log('WARN', 'WS closed: ' + code + closeReason);
     this.stopPing();
+    
+    // Track consecutive 4000 errors (duplicate client kicks)
+    if (code === 4000) {
+      this.duplicateKickCount = (this.duplicateKickCount || 0) + 1;
+      
+      if (this.duplicateKickCount >= 3) {
+        this.log('ERROR', '════════════════════════════════════════════════════════════════');
+        this.log('ERROR', 'DUPLICATE CLIENT DETECTED!');
+        this.log('ERROR', '');
+        this.log('ERROR', 'Another ClawdTalk client is running with the same API key.');
+        this.log('ERROR', 'Each connection kicks the other off, causing this loop.');
+        this.log('ERROR', '');
+        this.log('ERROR', 'To fix:');
+        this.log('ERROR', '  1. Find and kill all other ws-client processes:');
+        this.log('ERROR', '     pkill -f "ws-client.js" && pkill -f "connect.sh"');
+        this.log('ERROR', '  2. Or check other machines/containers using this API key');
+        this.log('ERROR', '  3. Then restart: ./scripts/connect.sh start');
+        this.log('ERROR', '════════════════════════════════════════════════════════════════');
+        
+        // Stop reconnecting - let user fix it
+        this.isShuttingDown = true;
+        process.exit(1);
+      }
+    } else {
+      // Reset counter on non-4000 close
+      this.duplicateKickCount = 0;
+    }
+    
     if (!this.isShuttingDown) this.scheduleReconnect();
   }
 
@@ -915,7 +1036,7 @@ class ClawdTalkClient {
 
   start() {
     this.log('INFO', '═══════════════════════════════════════════════');
-    this.log('INFO', 'ClawdTalk WebSocket Client v1.2');
+    this.log('INFO', 'ClawdTalk WebSocket Client v1.2.5');
     this.log('INFO', 'Full agentic mode with main session routing');
     this.log('INFO', '═══════════════════════════════════════════════');
     this.log('INFO', 'Chat endpoint: ' + this.gatewayChatUrl);

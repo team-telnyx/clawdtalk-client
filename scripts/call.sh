@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 #
 # ClawdTalk Outbound Call Script
-# Initiates an outbound call to the user's verified phone number
+# Initiates an outbound call to user's phone or an external number
 #
 # Usage:
-#   ./scripts/call.sh                    # Call with default greeting
-#   ./scripts/call.sh "Hey, what's up?"  # Call with custom greeting
-#   ./scripts/call.sh status <call_id>   # Check call status
-#   ./scripts/call.sh end <call_id>      # End an active call
+#   ./scripts/call.sh                                        # Call your phone
+#   ./scripts/call.sh "Hey, what's up?"                      # Call with greeting
+#   ./scripts/call.sh --to +15551234567                      # Call external (paid only)
+#   ./scripts/call.sh --to +1555... --purpose "Schedule meeting"  # External with purpose
+#   ./scripts/call.sh status <call_id>                       # Check call status
+#   ./scripts/call.sh end <call_id>                          # End an active call
 #
 
 set -euo pipefail
@@ -75,14 +77,55 @@ api() {
 
 # Commands
 cmd_call() {
-  local greeting="${1:-}"
+  local greeting=""
+  local to_number=""
+  local purpose=""
+  
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --to)
+        to_number="$2"
+        shift 2
+        ;;
+      --purpose|--context)
+        purpose="$2"
+        shift 2
+        ;;
+      -*)
+        error "Unknown option: $1"
+        ;;
+      *)
+        greeting="$1"
+        shift
+        ;;
+    esac
+  done
+  
+  # Build payload
   local payload='{}'
   
-  if [[ -n "$greeting" ]]; then
-    payload=$(jq -n --arg g "$greeting" '{greeting: $g}')
+  # Start with base object
+  if [[ -n "$to_number" ]]; then
+    payload=$(jq -n --arg t "$to_number" '{to: $t}')
   fi
   
-  info "Initiating outbound call..."
+  # Add greeting if provided
+  if [[ -n "$greeting" ]]; then
+    payload=$(echo "$payload" | jq --arg g "$greeting" '. + {greeting: $g}')
+  fi
+  
+  # Add context with purpose for external calls
+  if [[ -n "$purpose" ]]; then
+    payload=$(echo "$payload" | jq --arg p "$purpose" '. + {context: {purpose: $p}}')
+  fi
+  
+  if [[ -n "$to_number" ]]; then
+    info "Initiating outbound call to $to_number..."
+  else
+    info "Initiating outbound call to your phone..."
+  fi
+  
   local result
   result=$(api POST "/v1/calls" "$payload")
   
@@ -123,13 +166,21 @@ cmd_help() {
 ClawdTalk Outbound Call
 
 Usage:
-  $0                      Initiate call with default greeting
-  $0 "Hello!"             Initiate call with custom greeting
-  $0 status <call_id>     Check call status
-  $0 end <call_id>        End an active call
+  $0                                           Call your own phone (default)
+  $0 "Hello!"                                  Call with custom greeting
+  $0 --to +15551234567                         Call an external number (paid only)
+  $0 --to +1555... --purpose "Schedule mtg"   Call external with purpose
+  $0 --to +1555... "Hi!" --purpose "..."      External + greeting + purpose
+  $0 status <call_id>                          Check call status
+  $0 end <call_id>                             End an active call
 
-The call will be placed to your verified phone number.
-Your bot will answer and you can have a voice conversation.
+Options:
+  --to <number>      Call external number instead of your own
+  --purpose <text>   Tell the AI why you're calling (critical for external calls)
+
+Without --to: calls your verified phone number.
+With --to: calls the specified number (requires paid account with dedicated number).
+The --purpose flag tells the AI what the call is about so it knows what to do.
 EOF
 }
 
@@ -145,6 +196,6 @@ case "${1:-}" in
     cmd_help
     ;;
   *)
-    cmd_call "${1:-}"
+    cmd_call "$@"
     ;;
 esac

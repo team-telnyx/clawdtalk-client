@@ -1,6 +1,6 @@
 ---
 name: clawdtalk-client
-version: 1.2.2
+version: 1.2.4
 description: ClawdTalk — Voice calls and SMS for Clawdbot
 metadata: {"clawdbot":{"emoji":"📞","requires":{"bins":["bash","node","jq"]}}}
 ---
@@ -29,14 +29,18 @@ The WebSocket client routes calls to your gateway's main agent session, giving f
 
 ### Outbound Calls
 
-Have the bot call you:
+Have the bot call you or others:
 
 ```bash
-./scripts/call.sh                    # Call with default greeting
-./scripts/call.sh "Hey, what's up?"  # Call with custom greeting
-./scripts/call.sh status <call_id>   # Check call status
-./scripts/call.sh end <call_id>      # End call
+./scripts/call.sh                              # Call your phone
+./scripts/call.sh "Hey, what's up?"            # Call with greeting
+./scripts/call.sh --to +15551234567            # Call external number*
+./scripts/call.sh --to +15551234567 "Hello!"   # External with greeting
+./scripts/call.sh status <call_id>             # Check call status
+./scripts/call.sh end <call_id>                # End call
 ```
+
+*External calls require a paid account with a dedicated number. The AI will operate in privacy mode when calling external numbers (won't reveal your private info).
 
 ## SMS
 

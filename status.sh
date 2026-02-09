@@ -19,8 +19,8 @@ if command -v openclaw &> /dev/null && ! command -v clawdbot &> /dev/null; then
 fi
 
 echo ""
-echo "📞 ClawdTalk Status"
-echo "===================="
+echo "📞 ClawdTalk Status (v1.2.4)"
+echo "============================"
 echo ""
 
 # Check if configuration exists
@@ -90,13 +90,30 @@ echo ""
 # Gateway status
 echo "🌐 Gateway Status"
 echo "----------------"
-gateway_status=$($CLI_NAME gateway status 2>/dev/null || echo "error")
-if [[ "$gateway_status" =~ "running" ]]; then
-    echo "Status: ✅ RUNNING"
-    if [[ "$gateway_status" =~ "http" ]]; then
-        current_url=$(echo "$gateway_status" | grep -o 'https\?://[^[:space:]]*' | head -1)
-        echo "URL: $current_url"
+
+# Try multiple detection methods
+gateway_running=false
+
+# Method 1: Check for gateway process directly
+if pgrep -f "clawdbot.*gateway" &>/dev/null || pgrep -f "openclaw.*gateway" &>/dev/null; then
+    gateway_running=true
+fi
+
+# Method 2: Check for node process with gateway in cwd
+if ! $gateway_running && pgrep -f "node.*clawd" &>/dev/null; then
+    gateway_running=true
+fi
+
+# Method 3: Try the CLI status command
+if ! $gateway_running; then
+    gateway_status=$($CLI_NAME gateway status 2>/dev/null || echo "")
+    if [[ "$gateway_status" =~ "running" ]] || [[ "$gateway_status" =~ "Gateway" ]] || [[ "$gateway_status" =~ "pid" ]]; then
+        gateway_running=true
     fi
+fi
+
+if $gateway_running; then
+    echo "Status: ✅ RUNNING"
 else
     echo "Status: ❌ NOT RUNNING"
     echo "Start with: $CLI_NAME gateway start"

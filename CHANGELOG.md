@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.5
+- **Call outcome reporting**: After calls end, skill reports what happened to the user
+  - Voicemail left (with message preview)
+  - Call completed (with duration)
+  - No answer / silence detected
+  - Fax machine detected
+  - Voicemail failed (no beep)
+- Enhanced call.ended event handling with detailed outcome info
+
 ## 1.2.2
 - **Outbound calls**: New `call.sh` script to have your bot call you
 - **Missions removed**: Batch outreach feature disabled (not ready for production)
