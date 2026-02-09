@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ClawdTalk WebSocket Client v1.2.7
+ * ClawdTalk WebSocket Client v1.2.8
  * 
  * Connects to ClawdTalk server and routes voice calls to your Clawdbot gateway.
  * Phone → STT → Gateway Agent → TTS → Phone
@@ -294,7 +294,7 @@ class ClawdTalkClient {
     }
 
     if (msg.type === 'auth_ok') {
-      this.log('INFO', 'Authenticated (v1.2.7 agentic mode)');
+      this.log('INFO', 'Authenticated (v1.2.8 agentic mode)');
       this.reconnectAttempts = 0;
       this.currentReconnectDelay = RECONNECT_DELAY_MIN;
       this.startPing();
@@ -868,11 +868,11 @@ class ClawdTalkClient {
   }
 
   /**
-   * Report call outcome to user via gateway
-   * Called when a call ends to summarize what happened
+   * Report call outcome to user via gateway sessions_send
+   * Routes to the main persistent session instead of creating ephemeral sessions
    */
   async reportCallOutcome(callEvent) {
-    if (!this.gatewayChatUrl || !this.gatewayToken) {
+    if (!this.gatewayToken) {
       this.log('DEBUG', 'No gateway configured, skipping call report');
       return;
     }
@@ -923,25 +923,30 @@ class ClawdTalkClient {
       summary = emoji + ' Call ended: ' + reason;
     }
     
-    // Send to gateway as a system message
+    // Use sessions_send to route to main persistent session
+    // Derive sessions endpoint from chat URL (replace /v1/chat/completions with /v1/sessions/send)
+    var sessionsUrl = this.gatewayChatUrl ? 
+      this.gatewayChatUrl.replace('/v1/chat/completions', '/v1/sessions/send') :
+      'http://localhost:18789/v1/sessions/send';
+    
     try {
-      var response = await fetch(this.gatewayChatUrl, {
+      var response = await fetch(sessionsUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + this.gatewayToken,
-          'x-clawdbot-agent-id': this.gatewayAgent || 'voice'
+          'Authorization': 'Bearer ' + this.gatewayToken
         },
         body: JSON.stringify({
-          messages: [{ role: 'user', content: '[ClawdTalk] ' + summary }],
-          stream: false
+          sessionKey: 'agent:main:main',  // Route to main persistent session
+          message: '[ClawdTalk] ' + summary
         })
       });
       
       if (response.ok) {
-        this.log('INFO', 'Call outcome reported to user');
+        this.log('INFO', 'Call outcome reported to user (via sessions_send)');
       } else {
-        this.log('WARN', 'Failed to report call outcome: ' + response.status);
+        var errText = await response.text().catch(function() { return ''; });
+        this.log('WARN', 'Failed to report call outcome: ' + response.status + ' ' + errText);
       }
     } catch (err) {
       this.log('ERROR', 'Failed to report call outcome: ' + err.message);
@@ -1036,7 +1041,7 @@ class ClawdTalkClient {
 
   start() {
     this.log('INFO', '═══════════════════════════════════════════════');
-    this.log('INFO', 'ClawdTalk WebSocket Client v1.2.7');
+    this.log('INFO', 'ClawdTalk WebSocket Client v1.2.8');
     this.log('INFO', 'Full agentic mode with main session routing');
     this.log('INFO', '═══════════════════════════════════════════════');
     this.log('INFO', 'Chat endpoint: ' + this.gatewayChatUrl);

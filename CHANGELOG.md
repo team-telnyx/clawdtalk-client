@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.8
+- **Fix**: Use `sessions_send` to route call outcomes to main persistent session
+- Call reports now appear in your Telegram/Discord/etc. session instead of ephemeral sessions
+
 ## 1.2.7
 - **New**: `update.sh` script for easy self-updates from GitHub
 - **New**: `dist/clawdtalk-client-latest.zip` in repo for direct downloads
