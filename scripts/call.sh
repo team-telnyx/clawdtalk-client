@@ -105,6 +105,13 @@ cmd_call() {
   # Build payload
   local payload='{}'
   
+  # Smart detection: if greeting looks like a phone number and no --to provided, treat it as --to
+  if [[ -z "$to_number" && -n "$greeting" && "$greeting" =~ ^\+?[0-9]{10,15}$ ]]; then
+    warn "Detected phone number in greeting, treating as --to target"
+    to_number="$greeting"
+    greeting=""
+  fi
+  
   # Start with base object
   if [[ -n "$to_number" ]]; then
     payload=$(jq -n --arg t "$to_number" '{to: $t}')
