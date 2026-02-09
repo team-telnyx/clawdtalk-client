@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.6
+- **Fix**: Route call outcomes to `main` agent instead of legacy `voice` agent
+- Call reports now reach your primary session correctly
+
 ## 1.2.5
 - **Call outcome reporting**: After calls end, skill reports what happened to the user
   - Voicemail left (with message preview)
