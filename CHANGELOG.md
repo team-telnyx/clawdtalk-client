@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.7
+- **New**: `update.sh` script for easy self-updates from GitHub
+- **New**: `dist/clawdtalk-client-latest.zip` in repo for direct downloads
+- Run `./update.sh` to check for and install updates
+
 ## 1.2.6
 - **Fix**: Route call outcomes to `main` agent instead of legacy `voice` agent
 - Call reports now reach your primary session correctly
