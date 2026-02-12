@@ -32,9 +32,6 @@ fi
 
 if [[ -z "$SERVER" ]]; then
   SERVER="https://clawdtalk.com"
-  else
-    SERVER="https://clawdtalk.com"
-  fi
 fi
 
 # ── HTTP helper ─────────────────────────────────────────────────

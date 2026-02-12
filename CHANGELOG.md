@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0
+- **New**: Re-enabled missions — AI-powered outreach via voice calls and SMS
+- `./scripts/missions.sh` restored with create, list, get, events, status, and cancel commands
+- Supports voice, SMS, and combined (both) channels
+- Scheduling options: immediate, business hours, or custom datetime
+- Fixed shell syntax bug in missions script (broken SERVER fallback)
+
 ## 1.3.0
 - **New**: Log `call_control_id` from deep tool requests when present
 - Enables asking your agent "what was the call control ID of my last call?"
