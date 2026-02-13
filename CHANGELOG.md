@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.0
+- **New**: Approval requests — request user confirmation for sensitive actions
+- `./scripts/approval.sh` to send push notifications and wait for approve/deny
+- Supports biometric verification requirement for high-security actions
+- Configurable timeout and details field
+- Perfect for voice call flows: "I've sent the flight details to your phone for approval"
+
 ## 1.4.0
 - **New**: Re-enabled missions — AI-powered outreach via voice calls and SMS
 - `./scripts/missions.sh` restored with create, list, get, events, status, and cancel commands
