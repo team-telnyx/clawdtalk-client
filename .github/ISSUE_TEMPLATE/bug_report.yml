@@ -1,0 +1,69 @@
+name: 🐛 Bug Report
+description: Something isn't working right
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! The more detail you give, the faster we can fix it.
+
+  - type: input
+    id: version
+    attributes:
+      label: ClawdTalk Client Version
+      description: "Run `cat skills/clawdtalk-client/SKILL.md | head -5` to find it"
+      placeholder: "e.g. 1.3.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Voice Calls (Inbound)
+        - Voice Calls (Outbound)
+        - SMS
+        - WebSocket Connection
+        - Setup / Installation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      placeholder: "Describe the bug. What did you expect vs what actually happened?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `./scripts/connect.sh start`
+        2. Call the number
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Error output
+      description: "Run with `DEBUG=1` if possible"
+      render: shell
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "e.g. macOS 15.3, Ubuntu 24.04"
+
+  - type: input
+    id: openclaw-version
+    attributes:
+      label: OpenClaw Version
+      placeholder: "Run `openclaw --version`"

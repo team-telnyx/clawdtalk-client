@@ -1,0 +1,51 @@
+name: 💡 Feature Request
+description: Suggest a new feature or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Got an idea? We'd love to hear it.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      placeholder: "I want to... but currently I can't because..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      placeholder: "Describe what you'd like to happen"
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      placeholder: "Any workarounds you've tried or other approaches?"
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Area
+      options:
+        - Voice Calls
+        - SMS
+        - WebSocket / Connection
+        - Authentication / Security
+        - CLI / Scripts
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      placeholder: "Screenshots, links, examples, anything helpful"
