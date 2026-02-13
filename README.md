@@ -128,6 +128,25 @@ The gateway auth token in `openclaw.json`/`clawdbot.json` also supports this:
 
 **SMS:** Messages route through the ClawdTalk API. Inbound messages can trigger your bot via webhooks.
 
+## Local Development
+
+Test against a local backend without production credentials:
+
+```bash
+# 1. Copy the local dev config
+cp skill-config.local.example.json skill-config.json
+
+# 2. Update your ngrok URL in skill-config.json
+
+# 3. Start the client
+./scripts/connect.sh start
+
+# Or use --server flag (no config edit needed):
+./scripts/connect.sh start --server https://your-ngrok-url.ngrok-free.dev
+```
+
+See [LOCAL_DEV.md](LOCAL_DEV.md) for full setup instructions including test credentials.
+
 ## Troubleshooting
 
 | Issue | Fix |

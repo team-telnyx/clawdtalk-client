@@ -1,0 +1,7 @@
+{
+  "api_key": "cc_test_localdevkey123",
+  "server": "https://YOUR-NGROK-URL.ngrok-free.dev",
+  "owner_name": "Oliver",
+  "agent_name": "Olitron",
+  "greeting": "Hey, what's up?"
+}
