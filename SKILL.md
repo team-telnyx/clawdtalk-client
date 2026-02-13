@@ -199,6 +199,7 @@ The script outputs one of:
 - `denied` — User denied the action
 - `timeout` — No response within timeout
 - `expired` — Request expired
+- `no_devices` — User has no mobile app (skip approval or ask verbally)
 
 ### Example Flow (Voice Call)
 

@@ -140,7 +140,9 @@ request_approval() {
     devices_notified=$(echo "$response" | jq -r '.devices_notified // 0')
     
     if [ "$devices_notified" -eq 0 ]; then
-        echo -e "${YELLOW}Warning: No devices received notification. User may not have the mobile app installed.${NC}" >&2
+        # No devices registered — return immediately
+        echo "no_devices"
+        exit 0
     fi
     
     if [ "$wait" = false ]; then
@@ -271,11 +273,12 @@ EXAMPLES:
   status=$(./approval.sh status "$id")
 
 OUTPUT:
-  approved  - User approved the action
-  denied    - User denied the action
-  timeout   - No response within timeout period
-  expired   - Request expired before user responded
-  pending   - Still waiting (for status command)
+  approved    - User approved the action
+  denied      - User denied the action
+  timeout     - No response within timeout period
+  expired     - Request expired before user responded
+  no_devices  - User has no mobile app installed (no registered devices)
+  pending     - Still waiting (for status command)
 EOF
 }
 
