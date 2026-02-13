@@ -248,6 +248,20 @@ class ClawdTalkClient {
     console.log('[' + new Date().toISOString() + '] ' + level + ': ' + msg);
   }
 
+  /**
+   * Write device status to file for approval.sh to read.
+   * This avoids unnecessary API calls when user has no mobile app.
+   */
+  writeDeviceStatus(hasDevices) {
+    try {
+      var statusFile = path.join(SKILL_DIR, '.device-status');
+      fs.writeFileSync(statusFile, JSON.stringify({ has_devices: hasDevices, updated_at: new Date().toISOString() }));
+      this.log('INFO', 'Device status: has_devices=' + hasDevices);
+    } catch (err) {
+      this.log('WARN', 'Failed to write device status: ' + err.message);
+    }
+  }
+
   // ── Connection ──────────────────────────────────────────────
 
   async connect() {
@@ -298,6 +312,10 @@ class ClawdTalkClient {
       this.reconnectAttempts = 0;
       this.currentReconnectDelay = RECONNECT_DELAY_MIN;
       this.startPing();
+      
+      // Store has_devices flag for approval.sh to check
+      this.hasDevices = !!msg.has_devices;
+      this.writeDeviceStatus(this.hasDevices);
     } else if (msg.type === 'auth_error') {
       this.log('ERROR', 'Auth failed: ' + msg.message);
       this.isShuttingDown = true;

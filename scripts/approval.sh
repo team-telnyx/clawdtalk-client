@@ -35,6 +35,19 @@ check_config() {
     fi
 }
 
+# Check if user has any registered devices (from ws-client cache)
+check_devices() {
+    local status_file="$SKILL_DIR/.device-status"
+    if [ -f "$status_file" ]; then
+        local has_devices
+        has_devices=$(jq -r '.has_devices // false' "$status_file" 2>/dev/null)
+        if [ "$has_devices" = "false" ]; then
+            return 1  # No devices
+        fi
+    fi
+    return 0  # Has devices (or unknown - assume yes)
+}
+
 get_config() {
     local key="$1"
     local value
@@ -92,6 +105,12 @@ request_approval() {
         echo -e "${RED}Error: Action description required${NC}" >&2
         echo "Usage: $0 request \"Description of action\" [--details \"More info\"] [--biometric] [--timeout 300]" >&2
         exit 1
+    fi
+    
+    # Check if user has devices - skip API call entirely if not
+    if ! check_devices; then
+        echo "no_devices"
+        exit 0
     fi
     
     local api_key
