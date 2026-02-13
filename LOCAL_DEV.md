@@ -16,10 +16,23 @@ Test ClawdTalk client against a local backend without needing production credent
    ```sql
    -- API key: cc_test_localdevkey123
    -- Hash: a7a9983a8b11c580c1687bb580a3eeee87a81dd390691d5be776939fd09dfd67
-   INSERT INTO users (email, phone, pin_hash, api_key_hash, role)
-   VALUES ('test@local.dev', '+15551234567', 'test', 
-           'a7a9983a8b11c580c1687bb580a3eeee87a81dd390691d5be776939fd09dfd67', 
-           'admin');
+   INSERT INTO users (id, clawdbot_instance_id, phone_e164, phone_verified, pin_hash, bot_callback_url)
+   VALUES (
+     'test-user-1',
+     'test-instance',
+     '+15551234567',
+     1,  -- phone_verified = true (required for WebRTC)
+     'test',
+     'http://localhost:18789'
+   );
+   
+   INSERT INTO api_keys (id, user_id, key_prefix, key_hash)
+   VALUES (
+     'test-key-1',
+     'test-user-1',
+     'cc_test_',
+     'a7a9983a8b11c580c1687bb580a3eeee87a81dd390691d5be776939fd09dfd67'
+   );
    ```
 
 ## Quick Start
