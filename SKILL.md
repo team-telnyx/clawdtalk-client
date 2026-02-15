@@ -1,7 +1,7 @@
 ---
 name: clawdtalk-client
-version: 1.5.0
-description: ClawdTalk — Voice calls, SMS, and approval requests for Clawdbot
+version: 1.3.0
+description: ClawdTalk — Voice calls and SMS for Clawdbot
 metadata: {"clawdbot":{"emoji":"📞","requires":{"bins":["bash","node","jq"]}}}
 ---
 
@@ -52,180 +52,6 @@ Send and receive text messages:
 ./scripts/sms.sh conversations
 ```
 
-## Missions
-
-AI-powered outreach — have your assistant make calls or send texts to a list of targets on your behalf.
-
-Missions require a paid account (Starter or Pro).
-
-### When to Create a Mission
-
-Use your judgement: if the user's request involves **multiple targets** or requires **multi-step work per target**, create a mission instead of handling it manually.
-
-**Just do it directly** (no mission needed):
-- "What time is it?" — answer immediately
-- "Call mom" — single outbound call via `call.sh`
-- "Text John that I'm running late" — single SMS via `sms.sh`
-
-**Create a mission** when the request involves:
-- **Multiple people to contact** — "Call these 5 plumbers and get quotes"
-- **Research across targets** — "Find me the cheapest electrician in Austin"
-- **Actions after each call** — "Call each vendor, ask about availability, and compare prices"
-- **Batch outreach** — "Remind all my clients about tomorrow's meeting"
-- **Multi-step workflows** — "Call these restaurants, ask if they have a table for 4 tonight, and book the first one that does"
-
-In short: one person, one simple thing → handle it directly. Multiple people, or complex instructions that the AI should follow autonomously for each target → create a mission.
-
-### Commands
-
-```bash
-./scripts/missions.sh create '<json>'      # Create and run a mission
-./scripts/missions.sh list                  # List all missions
-./scripts/missions.sh get <id>             # Get mission details
-./scripts/missions.sh events <id>          # Show event timeline
-./scripts/missions.sh status <id>          # Status summary
-./scripts/missions.sh cancel <id>          # Cancel a running mission
-```
-
-### Create a Mission
-
-Pass a JSON body with these fields:
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Mission name (e.g., "Get plumber quotes") |
-| `instructions` | Yes | What the AI should do on each call/SMS |
-| `targets` | Yes | Array of `{phone, name?, message?}` objects (E.164 format) |
-| `channel` | No | `"voice"` (default), `"sms"`, or `"both"` |
-| `assistant_config` | No | `{greeting?, model?}` overrides |
-| `schedule` | No | `"now"` (default), `"business_hours"`, or ISO datetime |
-| `metadata` | No | Any extra data to attach |
-
-### Examples
-
-```bash
-# Voice mission — call plumbers for quotes
-./scripts/missions.sh create '{
-  "name": "Get plumber quotes",
-  "instructions": "Call each plumber. Ask about hourly rates, availability this week, and whether they are licensed and insured. Be polite and professional.",
-  "targets": [
-    {"name": "ABC Plumbing", "phone": "+15125551234"},
-    {"name": "Quick Fix Pipes", "phone": "+15125555678"}
-  ],
-  "channel": "voice"
-}'
-
-# SMS mission — send appointment reminders
-./scripts/missions.sh create '{
-  "name": "Appointment reminders",
-  "instructions": "Remind each person about their appointment tomorrow at 2pm.",
-  "targets": [
-    {"name": "Alice", "phone": "+15125551111"},
-    {"name": "Bob", "phone": "+15125552222"}
-  ],
-  "channel": "sms"
-}'
-
-# Check how it's going
-./scripts/missions.sh status 42
-
-# See full event details
-./scripts/missions.sh events 42
-```
-
-### Mission Statuses
-
-| Status | Meaning |
-|--------|---------|
-| `pending` | Created, not yet started |
-| `running` | Actively making calls/sending texts |
-| `succeeded` | All targets reached |
-| `failed` | Execution failed |
-| `cancelled` | Cancelled by user |
-
-### Quotas
-
-| Plan | Missions/month | Events/month |
-|------|---------------|--------------|
-| Free | 0 | 0 |
-| Starter | 20 | 50 |
-| Pro | 100 | 200 |
-
-Each target counts as 1 event per channel. Using `"both"` doubles the event count.
-
-## Approval Requests
-
-Request user approval for sensitive actions during voice calls. Sends a push notification to the user's ClawdTalk mobile app and waits for their response.
-
-### When to Request Approval
-
-Use approval requests when about to take **irreversible or sensitive actions** the user should explicitly confirm:
-
-- **Booking/purchasing**: "Book this flight for $450?"
-- **Sending messages**: "Send this email to your boss?"
-- **Financial actions**: "Transfer $500 to checking?"
-- **Deletions**: "Delete these 50 files?"
-- **External actions**: "Post this to Twitter?"
-
-Don't request approval for:
-- Informational queries (weather, search results)
-- Reading/viewing data
-- Actions the user explicitly just asked for in the same breath
-
-### Commands
-
-```bash
-./scripts/approval.sh request "Book flight LAX→JFK for $450"
-./scripts/approval.sh request "Send email" --details "To: boss@company.com\nSubject: Q4 Report"
-./scripts/approval.sh request "Transfer $5000" --biometric
-./scripts/approval.sh request "Delete files" --timeout 120
-./scripts/approval.sh status <request_id>
-./scripts/approval.sh list
-```
-
-### Options
-
-| Option | Description |
-|--------|-------------|
-| `--details "text"` | Additional details shown to user |
-| `--biometric` | Require fingerprint/face to approve |
-| `--timeout <secs>` | How long to wait (default: 300) |
-| `--no-wait` | Return request ID immediately |
-
-### Output
-
-The script outputs one of:
-- `approved` — User approved the action
-- `denied` — User denied the action
-- `timeout` — No response within timeout
-- `expired` — Request expired
-- `no_devices` — User has no mobile app (skip approval or ask verbally)
-
-### Example Flow (Voice Call)
-
-```
-User: "Book me the first flight out of LAX tomorrow morning"
-
-Bot: *searches flights*
-Bot: "Found a Delta flight at 6:15am for $389. I've sent the details 
-      to your phone for approval."
-
-Bot: *runs: ./scripts/approval.sh request "Book Delta flight" \
-       --details "LAX→JFK, 6:15am, $389, Feb 15"*
-
-User: *taps Approve on phone*
-
-Bot: "Got it, booking now..."
-Bot: *books the flight*
-Bot: "All set! Your confirmation number is ABC123."
-```
-
-### Requirements
-
-- User must have ClawdTalk mobile app installed
-- Device registered for push notifications
-- Active API key with approval permissions
-
 ## Configuration
 
 Edit `skill-config.json`:
@@ -237,6 +63,36 @@ Edit `skill-config.json`:
 | `owner_name` | Your name (auto-detected from USER.md) |
 | `agent_name` | Agent name (auto-detected from IDENTITY.md) |
 | `greeting` | Custom greeting for inbound calls |
+
+## Approval Requests (Sensitive Actions)
+
+For destructive or sensitive actions during voice calls, request user approval first:
+
+```bash
+./scripts/approval.sh request "Delete GitHub repo myproject"
+./scripts/approval.sh request "Send $500 to John" --biometric
+./scripts/approval.sh request "Post tweet about X" --details "Full text: ..."
+```
+
+**When to request approval:**
+- Deleting repos, files, or data
+- Sending money or making purchases
+- Posting to social media
+- Sending emails/messages to others
+- Any irreversible action
+
+**Response values:**
+- `approved` → Execute the action, confirm completion
+- `denied` → Tell user "Okay, I won't do that"
+- `timeout` → "I didn't get a response, should I try again?"
+- `no_devices` → Skip approval, action not executed (no mobile app)
+
+**Example flow in voice call:**
+1. User: "Delete my test-repo on GitHub"
+2. You: "I'll need your approval for that. Check your phone."
+3. Run: `approval.sh request "Delete GitHub repo test-repo"`
+4. If approved: Delete the repo, then say "Done, test-repo has been deleted"
+5. If denied: "Got it, I won't delete it"
 
 ## Troubleshooting
 

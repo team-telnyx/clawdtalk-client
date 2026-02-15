@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 /**
- * ClawdTalk WebSocket Client v1.2.9
+ * ClawdTalk WebSocket Client v1.3.0
  * 
  * Connects to ClawdTalk server and routes voice calls to your Clawdbot gateway.
  * Phone → STT → Gateway Agent → TTS → Phone
+ * 
+ * v1.3.0: Instant approval via WebSocket (no more polling delay)
  */
 
 const WebSocket = require('ws');
@@ -141,6 +143,7 @@ class ClawdTalkClient {
     this.pendingRequests = new Map();
     this.transcriptionDebounce = new Map();
     this.queuedTranscriptions = new Map();
+    this.pendingApprovals = new Map(); // requestId -> { resolve, reject, timeout }
     this.args = parseArgs();
 
     // Exponential backoff for reconnection
@@ -248,20 +251,6 @@ class ClawdTalkClient {
     console.log('[' + new Date().toISOString() + '] ' + level + ': ' + msg);
   }
 
-  /**
-   * Write device status to file for approval.sh to read.
-   * This avoids unnecessary API calls when user has no mobile app.
-   */
-  writeDeviceStatus(hasDevices) {
-    try {
-      var statusFile = path.join(SKILL_DIR, '.device-status');
-      fs.writeFileSync(statusFile, JSON.stringify({ has_devices: hasDevices, updated_at: new Date().toISOString() }));
-      this.log('INFO', 'Device status: has_devices=' + hasDevices);
-    } catch (err) {
-      this.log('WARN', 'Failed to write device status: ' + err.message);
-    }
-  }
-
   // ── Connection ──────────────────────────────────────────────
 
   async connect() {
@@ -308,14 +297,10 @@ class ClawdTalkClient {
     }
 
     if (msg.type === 'auth_ok') {
-      this.log('INFO', 'Authenticated (v1.2.9 agentic mode)');
+      this.log('INFO', 'Authenticated (v1.3.0 agentic mode)');
       this.reconnectAttempts = 0;
       this.currentReconnectDelay = RECONNECT_DELAY_MIN;
       this.startPing();
-      
-      // Store has_devices flag for approval.sh to check
-      this.hasDevices = !!msg.has_devices;
-      this.writeDeviceStatus(this.hasDevices);
     } else if (msg.type === 'auth_error') {
       this.log('ERROR', 'Auth failed: ' + msg.message);
       this.isShuttingDown = true;
@@ -412,12 +397,8 @@ class ClawdTalkClient {
     // Handle deep_tool_request (Voice AI asking for complex query via Clawdbot)
     if (event === 'deep_tool_request') {
       var requestId = msg.request_id;
-      var callControlId = msg.call_control_id || null;
       var query = msg.query || '';
       this.log('INFO', 'Deep tool request [' + requestId + ']: ' + query.substring(0, 100));
-      if (callControlId) {
-        this.log('INFO', 'Call control ID: ' + callControlId);
-      }
       
       // Process via full Clawdbot agent
       this.handleDeepToolRequest(callId, requestId, query, msg.context || {});
@@ -436,6 +417,21 @@ class ClawdTalkClient {
       return;
     }
 
+    // Handle approval response (instant WebSocket notification)
+    if (event === 'approval.responded') {
+      var approvalRequestId = msg.request_id;
+      var decision = msg.decision;
+      this.log('INFO', 'Approval response via WS: ' + approvalRequestId + ' -> ' + decision);
+      
+      var pending = this.pendingApprovals.get(approvalRequestId);
+      if (pending) {
+        clearTimeout(pending.timeout);
+        this.pendingApprovals.delete(approvalRequestId);
+        pending.resolve(decision);
+      }
+      return;
+    }
+
     // Log unhandled events for debugging
     if (process.env.DEBUG) {
       this.log('DEBUG', 'Unhandled event: ' + event);
@@ -446,11 +442,29 @@ class ClawdTalkClient {
 
   async handleDeepToolRequest(callId, requestId, query, context) {
     try {
+      // TEST PHRASE: "send test push" or "test notification" triggers approval directly
+      var lowerQuery = query.toLowerCase();
+      if (lowerQuery.includes('test push') || lowerQuery.includes('test notification') || lowerQuery.includes('send a test')) {
+        this.log('INFO', 'Test phrase detected - triggering approval push');
+        var approvalResult = await this.triggerTestApproval();
+        var responseText = approvalResult;
+        if (approvalResult === 'approved') {
+          responseText = 'You approved the test notification. The push system is working correctly.';
+        } else if (approvalResult === 'denied') {
+          responseText = 'You denied the test notification. The push system is working, you just said no.';
+        }
+        this.sendDeepToolResult(requestId, responseText);
+        this.log('INFO', 'Deep tool complete [' + requestId + ']: ' + responseText.substring(0, 100));
+        return;
+      }
+      
       // Route to main session via tools/invoke sessions_send - uses full agent context/memory
       var voicePrefix = '[VOICE CALL] Respond concisely for speech. No markdown, no lists, no URLs. ';
       
-      // Use the main agent session - format: agent:{agentId}:main
-      var mainSessionKey = 'agent:' + this.mainAgentId + ':main';
+      // Use the main agent session - always route to main session
+      var mainSessionKey = 'agent:main:main';
+      
+      this.log('DEBUG', 'Deep tool calling Gateway: url=' + this.gatewayToolsUrl + ' session=' + mainSessionKey + ' hasToken=' + !!this.gatewayToken);
       
       var response = await fetch(this.gatewayToolsUrl, {
         method: 'POST',
@@ -477,6 +491,7 @@ class ClawdTalkClient {
       }
       
       var result = await response.json();
+      this.log('DEBUG', 'Gateway response: ' + JSON.stringify(result).substring(0, 500));
       
       // Extract reply from the nested response structure
       var reply = '';
@@ -513,6 +528,138 @@ class ClawdTalkClient {
         this.sendDeepToolResult(requestId, 'Sorry, I had trouble with that request.');
       }
     }
+  }
+
+  async triggerTestApproval() {
+    return this.requestApproval('Test notification from voice call', { timeout: 60 });
+  }
+
+  /**
+   * Request approval via HTTP and wait for WebSocket response (instant)
+   * Falls back to polling if WebSocket notification doesn't arrive
+   */
+  async requestApproval(action, options = {}) {
+    const timeout = options.timeout || 60;
+    const details = options.details || null;
+    const biometric = options.biometric || false;
+    
+    try {
+      this.log('INFO', 'Requesting approval: ' + action);
+      
+      // Create approval request via HTTP
+      const response = await fetch(this.baseUrl + '/v1/approvals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + this.apiKey
+        },
+        body: JSON.stringify({
+          action: action,
+          details: details,
+          require_biometric: biometric,
+          expires_in: timeout
+        })
+      });
+      
+      if (!response.ok) {
+        const errText = await response.text();
+        this.log('ERROR', 'Approval request failed: ' + response.status + ' ' + errText);
+        return 'Failed to send approval request.';
+      }
+      
+      const result = await response.json();
+      const requestId = result.request_id;
+      const devicesNotified = result.devices_notified || 0;
+      
+      this.log('INFO', 'Approval created: ' + requestId + ' (devices: ' + devicesNotified + ')');
+      
+      if (devicesNotified === 0) {
+        return 'No devices registered. You need to log into the mobile app first.';
+      }
+      
+      // Wait for WebSocket notification (with timeout fallback)
+      const decision = await this.waitForApproval(requestId, timeout * 1000);
+      
+      this.log('INFO', 'Approval result: ' + decision);
+      
+      if (decision === 'approved') {
+        return 'approved';
+      } else if (decision === 'denied') {
+        return 'denied';
+      } else if (decision === 'timeout' || decision === 'expired') {
+        return 'The approval request timed out. Check if your phone received it.';
+      } else {
+        return 'Approval result: ' + decision;
+      }
+    } catch (err) {
+      this.log('ERROR', 'Approval request failed: ' + err.message);
+      return 'Failed to send approval request. Error: ' + err.message;
+    }
+  }
+
+  /**
+   * Wait for approval response via WebSocket (instant) or polling (fallback)
+   */
+  waitForApproval(requestId, timeoutMs) {
+    var self = this;
+    
+    return new Promise(function(resolve) {
+      // Set up timeout
+      var timeoutId = setTimeout(function() {
+        self.pendingApprovals.delete(requestId);
+        resolve('timeout');
+      }, timeoutMs);
+      
+      // Register pending approval for WebSocket notification
+      self.pendingApprovals.set(requestId, {
+        resolve: resolve,
+        timeout: timeoutId
+      });
+      
+      // Also poll as fallback (WebSocket might miss it)
+      self.pollApprovalStatus(requestId, resolve, timeoutId);
+    });
+  }
+
+  /**
+   * Poll approval status as fallback (in case WebSocket misses the event)
+   */
+  async pollApprovalStatus(requestId, resolve, timeoutId) {
+    const pollInterval = 1000; // 1 second
+    
+    const poll = async () => {
+      // Check if already resolved via WebSocket
+      if (!this.pendingApprovals.has(requestId)) {
+        return; // Already resolved
+      }
+      
+      try {
+        const response = await fetch(this.baseUrl + '/v1/approvals/' + requestId, {
+          headers: { 'Authorization': 'Bearer ' + this.apiKey }
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.status !== 'pending') {
+            // Resolved! Clear and return
+            clearTimeout(timeoutId);
+            this.pendingApprovals.delete(requestId);
+            resolve(result.status);
+            return;
+          }
+        }
+      } catch (err) {
+        this.log('WARN', 'Approval poll failed: ' + err.message);
+      }
+      
+      // Still pending, poll again
+      if (this.pendingApprovals.has(requestId)) {
+        setTimeout(() => poll(), pollInterval);
+      }
+    };
+    
+    // Start polling after a short delay (give WebSocket a chance first)
+    setTimeout(() => poll(), 500);
   }
 
   sendDeepToolProgress(requestId, text) {
@@ -1067,7 +1214,7 @@ class ClawdTalkClient {
 
   start() {
     this.log('INFO', '═══════════════════════════════════════════════');
-    this.log('INFO', 'ClawdTalk WebSocket Client v1.2.9');
+    this.log('INFO', 'ClawdTalk WebSocket Client v1.3.0');
     this.log('INFO', 'Full agentic mode with main session routing');
     this.log('INFO', '═══════════════════════════════════════════════');
     this.log('INFO', 'Chat endpoint: ' + this.gatewayChatUrl);
