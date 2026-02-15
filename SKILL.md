@@ -153,6 +153,36 @@ Pass a JSON body with these fields:
 
 Each target counts as 1 event per channel. Using `"both"` doubles the event count.
 
+## Approval Requests (Sensitive Actions)
+
+For destructive or sensitive actions during voice calls, request user approval first:
+
+```bash
+./scripts/approval.sh request "Delete GitHub repo myproject"
+./scripts/approval.sh request "Send $500 to John" --biometric
+./scripts/approval.sh request "Post tweet about X" --details "Full text: ..."
+```
+
+**When to request approval:**
+- Deleting repos, files, or data
+- Sending money or making purchases
+- Posting to social media
+- Sending emails/messages to others
+- Any irreversible action
+
+**Response values:**
+- `approved` → Execute the action, confirm completion
+- `denied` → Tell user "Okay, I won't do that"
+- `timeout` → "I didn't get a response, should I try again?"
+- `no_devices` → Skip approval, action not executed (no mobile app)
+
+**Example flow in voice call:**
+1. User: "Delete my test-repo on GitHub"
+2. You: "I'll need your approval for that. Check your phone."
+3. Run: `approval.sh request "Delete GitHub repo test-repo"`
+4. If approved: Delete the repo, then say "Done, test-repo has been deleted"
+5. If denied: "Got it, I won't delete it"
+
 ## Configuration
 
 Edit `skill-config.json`:
