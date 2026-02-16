@@ -135,6 +135,24 @@ The gateway auth token in `openclaw.json`/`clawdbot.json` also supports this:
 }
 ```
 
+### Gateway Tools (Required)
+
+The voice assistant uses `sessions_send` to proxy questions to your Clawdbot. You must allow it on the gateway's `/tools/invoke` endpoint:
+
+```json
+{
+  "gateway": {
+    "tools": {
+      "allow": ["sessions_send"]
+    }
+  }
+}
+```
+
+Without this, the voice assistant will handle calls on its own but won't be able to forward questions to your bot (you'll see `sessions_send failed: 404` in the logs).
+
+Run `./scripts/connect.sh status` to check if this is configured correctly.
+
 ## How It Works
 
 **Voice:** Phone calls connect via Telnyx to the ClawdTalk server. The WebSocket client (`ws-client.js`) routes transcribed speech to your gateway's `/v1/chat/completions` endpoint. Your bot processes it like any other message with the same tools and context. The response is converted to speech and played back.
@@ -147,6 +165,7 @@ The gateway auth token in `openclaw.json`/`clawdbot.json` also supports this:
 |-------|-----|
 | Auth failed | Regenerate API key at clawdtalk.com |
 | Empty responses | Run `./setup.sh`, then `clawdbot gateway restart` |
+| `sessions_send failed: 404` | Add `sessions_send` to `gateway.tools.allow` in your OpenClaw config (see Gateway Tools above) |
 | Connection drops | Check `tail -f .connect.log` for errors |
 | Debug mode | `DEBUG=1 ./scripts/connect.sh restart` |
 
