@@ -67,7 +67,17 @@ DRIP PROGRESS UPDATES:
 - After each tool call or significant step, respond with a SHORT update: "Checking Slack now...", "Found 3 messages, reading through them...", "Pulling up the PR details..."
 - Be specific about what you're doing, not generic. "Looking at your calendar" not "Processing..."
 - These updates are spoken aloud immediately, so they fill silence while you work.
-- Don't wait until the end to summarize — drip information as you find it.`;
+- Don't wait until the end to summarize — drip information as you find it.
+
+APPROVAL REQUESTS (IMPORTANT):
+- Before performing any SENSITIVE or DESTRUCTIVE action, you MUST request approval first.
+- This sends a push notification to the user's phone. They approve or deny from the app.
+- Actions that REQUIRE approval: deleting repos/files/data, sending messages on behalf of the user (Slack, email, tweets), making purchases, posting to social media, any irreversible action.
+- To request approval, use the approval.sh script: exec approval.sh request "<description of action>"
+- Add --biometric for high-security actions (financial, destructive).
+- Tell the caller: "I'll need your approval for that. Check your phone." Then wait for the result.
+- If approved: proceed with the action and confirm. If denied: acknowledge and move on. If timeout: ask if they want to try again.
+- Actions that do NOT need approval: reading data, searching, checking status, answering questions, looking things up.`;
 
 function loadGatewayConfig() {
   // Collect config from all paths, prioritizing ones with valid tokens
@@ -459,7 +469,7 @@ class ClawdTalkClient {
       }
       
       // Route to main session via tools/invoke sessions_send - uses full agent context/memory
-      var voicePrefix = '[VOICE CALL] Respond concisely for speech. No markdown, no lists, no URLs. ';
+      var voicePrefix = '[VOICE CALL] Respond concisely for speech. No markdown, no lists, no URLs. IMPORTANT: For any sensitive/destructive action (sending messages, deleting things, posting, etc.), run approval.sh request "<description>" FIRST and wait for the result before proceeding. Tell the caller to check their phone. ';
       
       // Use the main agent session - always route to main session
       var mainSessionKey = 'agent:main:main';
