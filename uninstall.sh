@@ -79,14 +79,9 @@ else
 fi
 echo ""
 
-# 3. Restart gateway if we changed the config
+# 3. Tell user to restart gateway if we changed the config
 if [ "$gateway_changed" = true ]; then
-    echo "↻ Restarting gateway to apply changes..."
-    if command -v "$CLI_NAME" &> /dev/null; then
-        $CLI_NAME gateway restart 2>/dev/null && echo "   ✓ Gateway restarted" || echo "   ⚠️  Restart failed — run '$CLI_NAME gateway restart' manually"
-    else
-        echo "   ⚠️  Run '$CLI_NAME gateway restart' to apply changes"
-    fi
+    echo "   ⚠️  Run '$CLI_NAME gateway restart' to apply changes"
     echo ""
 fi
 

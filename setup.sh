@@ -132,13 +132,8 @@ if [ -n "$GATEWAY_CONFIG" ] && [ -f "$GATEWAY_CONFIG" ]; then
             echo "   ✓ Added '${main_agent_name} Voice' agent to gateway config"
             voice_agent_added=true
 
-            # Restart gateway to pick up new agent
-            if command -v "$CLI_NAME" &> /dev/null; then
-                echo "   ↻ Restarting gateway to apply changes..."
-                $CLI_NAME gateway restart 2>/dev/null && echo "   ✓ Gateway restarted" || echo "   ⚠️  Restart failed — run '$CLI_NAME gateway restart' manually"
-            else
-                echo "   ⚠️  Run '$CLI_NAME gateway restart' to apply the new agent config"
-            fi
+            # Tell user to restart gateway (skill shouldn't restart the gateway itself)
+            echo "   ⚠️  Run '$CLI_NAME gateway restart' to apply the new agent config"
         else
             rm -f "$tmp_config"
             echo "   ⚠️  Could not auto-configure — see manual steps below"
