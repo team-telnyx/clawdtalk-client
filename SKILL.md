@@ -11,6 +11,22 @@ Voice calling, SMS messaging, and AI Missions for Clawdbot. Call your bot by pho
 
 ---
 
+# ⚠️ CRITICAL: SLUG CONSISTENCY
+
+`init` auto-generates a slug from the mission name (lowercased, spaces → hyphens).
+**Every command that takes a slug (`setup-agent`, `save-memory`, `complete`) MUST use the EXACT same slug.**
+
+Mismatched slugs = agent not linked = scheduled events invisible on the frontend.
+
+```bash
+# After init, ALWAYS confirm the slug:
+python scripts/telnyx_api.py list-state
+# Output: find-window-washing-contractors: Find window washing contractors [running]
+#         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ COPY-PASTE THIS. NEVER ABBREVIATE.
+```
+
+---
+
 # ⚠️ CRITICAL: YOU OWN THE MISSION LIFECYCLE
 
 **The server does NOT automatically update plan steps or mission status.** That is YOUR job as the bot. If you don't update steps and complete the mission, the UI will show "Running" forever with all steps "Pending".
@@ -327,6 +343,8 @@ python scripts/telnyx_api.py init "Find window washing contractors" "Find contra
 
 This also automatically resumes if a mission with the same name already exists.
 
+**⚠️ Immediately after `init`, run `list-state` and copy the exact slug. Use it for ALL subsequent commands.**
+
 ---
 
 ## Phase 2: Voice/SMS Agent Setup
@@ -363,9 +381,18 @@ python scripts/telnyx_api.py setup-agent "find-window-washing-contractors" "Cont
 
 This automatically creates the assistant, links it to the mission run, finds an available phone number, assigns it, and saves all IDs to the state file.
 
+**⚠️ The slug MUST match what `init` created. If it doesn't, the agent won't be linked and scheduled events won't appear on the frontend.**
+
+**Verify linking worked immediately after:**
+```bash
+python scripts/telnyx_api.py list-linked-agents <mission_id> <run_id>
+# Must show your assistant_id. If empty → slug was wrong. Fix with:
+python scripts/telnyx_api.py link-agent <mission_id> <run_id> <assistant_id>
+```
+
 ### Step 2.3: Link Agent to Mission Run
 
-**If using `setup-agent`**: Linking is done automatically.
+**If using `setup-agent`**: Linking is done automatically (only if slug matches `init`).
 
 **If setting up manually**:
 ```bash
@@ -685,6 +712,18 @@ Track every number's status in mission memory. Retry based on recipient type:
 - **Automated systems**: retry in 5-15 min, up to 3 times
 - **Service industry**: retry in 30 min - 2 hours, avoid peak hours
 - **Professionals**: retry next business day, leave one voicemail max
+
+---
+
+## ❌ Common Pitfalls
+
+| Mistake | Symptom | Fix |
+|---------|---------|-----|
+| Different slug for `init` vs `setup-agent` | Scheduled events missing from frontend | `list-state` after `init`, copy-paste slug |
+| Forgetting `save-memory` after actions | Frontend shows nothing | Save immediately after every action |
+| Not checking mission status after step changes | Mission stuck "running" forever | Run decision tree after every step |
+| Leaving polling crons running | Wasted resources, stale polls | Delete cron on any terminal state |
+| Not verifying `list-linked-agents` after `setup-agent` | Agent not linked, events invisible | Always verify, fix with `link-agent` |
 
 ---
 
