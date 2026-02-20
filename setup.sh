@@ -117,15 +117,13 @@ if [ -n "$GATEWAY_CONFIG" ] && [ -f "$GATEWAY_CONFIG" ]; then
                 workspace: $workspace
             }')
 
-        # Add voice agent to agents.list and enable chatCompletions endpoint
+        # Add voice agent to agents.list
         tmp_config=$(mktemp)
         if jq --argjson agent "$voice_agent" '
-            .agents.list = (.agents.list // []) + [$agent] |
-            .gateway.http.endpoints.chatCompletions.enabled = true
+            .agents.list = (.agents.list // []) + [$agent]
         ' "$GATEWAY_CONFIG" > "$tmp_config" 2>/dev/null; then
             mv "$tmp_config" "$GATEWAY_CONFIG"
             echo "   ✓ Added '${main_agent_name} Voice' agent to gateway config"
-            echo "   ✓ Enabled /v1/chat/completions endpoint"
             voice_agent_added=true
 
             # Restart gateway to pick up new agent
