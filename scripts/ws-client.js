@@ -466,6 +466,23 @@ class ClawdTalkClient {
 
   // ── Deep Tool Handler ───────────────────────────────────────
 
+  // Keywords that indicate a sensitive/destructive action needing approval
+  isSensitiveRequest(query) {
+    var lower = query.toLowerCase();
+    var sensitivePatterns = [
+      'delete', 'remove', 'destroy', 'drop',
+      'send message', 'send email', 'send slack', 'send sms', 'send text',
+      'post to', 'tweet', 'publish',
+      'create repo', 'create a repo', 'create repository',
+      'push to', 'merge', 'deploy',
+      'transfer', 'payment', 'purchase', 'buy',
+      'update repo', 'update the repo', 'edit repo',
+      'add file', 'add a file', 'modify', 'change',
+      'commit', 'write to',
+    ];
+    return sensitivePatterns.some(function(p) { return lower.includes(p); });
+  }
+
   async handleDeepToolRequest(callId, requestId, query, context) {
     try {
       // TEST PHRASE: "send test push" or "test notification" triggers approval directly
@@ -483,9 +500,37 @@ class ClawdTalkClient {
         this.log('INFO', 'Deep tool complete [' + requestId + ']: ' + responseText.substring(0, 100));
         return;
       }
+
+      // Check if this is a sensitive action that needs approval
+      if (this.isSensitiveRequest(query)) {
+        this.log('INFO', 'Sensitive request detected, requesting approval: ' + query.substring(0, 80));
+        
+        // Tell the caller we're sending a notification
+        this.sendDeepToolProgress(requestId, 'Sending you a notification for approval.');
+        
+        var approvalDecision = await this.requestApproval(query.substring(0, 200));
+        
+        if (approvalDecision === 'approved') {
+          this.sendDeepToolProgress(requestId, 'I see you approved that. Let me take care of it now.');
+          this.log('INFO', 'Approval granted, routing to agent');
+          // Fall through to route to agent below
+        } else if (approvalDecision === 'denied') {
+          this.sendDeepToolProgress(requestId, 'I see you denied that request.');
+          this.sendDeepToolResult(requestId, 'No problem, I won\'t do that.');
+          this.log('INFO', 'Approval denied by user');
+          return;
+        } else if (approvalDecision === 'no_devices' || approvalDecision === 'no_devices_reached') {
+          this.log('INFO', 'No devices for approval, skipping approval and routing directly');
+          // No devices — skip approval entirely and route to agent
+        } else if (approvalDecision === 'timeout') {
+          this.sendDeepToolResult(requestId, 'The approval request timed out. Would you like to try again?');
+          this.log('INFO', 'Approval timed out');
+          return;
+        }
+      }
       
       // Route to main session via tools/invoke sessions_send - uses full agent context/memory
-      var voicePrefix = '[VOICE CALL] Respond concisely for speech. No markdown, no lists, no URLs. IMPORTANT: For any sensitive/destructive action (sending messages, deleting things, posting, etc.), run approval.sh request "<description>" FIRST and wait for the result. Tell the caller "I\'m sending a notification to your phone now for you to approve." If the result is "timeout", "no_devices", or "no_devices_reached", offer voice confirmation as fallback. ';
+      var voicePrefix = '[VOICE CALL] Respond concisely for speech. No markdown, no lists, no URLs. Do NOT request approval — it has already been handled. Just perform the action directly. ';
       
       // Use the main agent session - always route to main session
       var mainSessionKey = 'agent:main:main';
