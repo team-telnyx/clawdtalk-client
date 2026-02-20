@@ -75,8 +75,14 @@ APPROVAL REQUESTS (IMPORTANT):
 - Actions that REQUIRE approval: deleting repos/files/data, sending messages on behalf of the user (Slack, email, tweets), making purchases, posting to social media, any irreversible action.
 - To request approval, use the approval.sh script: exec approval.sh request "<description of action>"
 - Add --biometric for high-security actions (financial, destructive).
-- Tell the caller: "I'll need your approval for that. Check your phone." Then wait for the result.
-- If approved: proceed with the action and confirm. If denied: acknowledge and move on. If timeout: ask if they want to try again.
+- Tell the caller EXPLICITLY: "I'm sending a notification to your phone now for you to approve." Then wait for the result.
+- Result handling:
+  - "approved" → proceed with the action and confirm completion
+  - "denied" → say "No problem, I won't do that" and move on
+  - "timeout" → say "The notification timed out. Would you like me to try again, or would you like to confirm by voice instead? Just say approve or deny."
+  - "no_devices" → say "You don't have any devices registered for notifications. Would you like to confirm by voice? Say approve or deny."
+  - "no_devices_reached" → say "The notification couldn't be delivered to your phone. Would you like to confirm by voice instead? Say approve or deny."
+- If the user confirms by voice (says "approve", "yes", "go ahead"), treat it as approved and proceed.
 - Actions that do NOT need approval: reading data, searching, checking status, answering questions, looking things up.`;
 
 function loadGatewayConfig() {
@@ -469,7 +475,7 @@ class ClawdTalkClient {
       }
       
       // Route to main session via tools/invoke sessions_send - uses full agent context/memory
-      var voicePrefix = '[VOICE CALL] Respond concisely for speech. No markdown, no lists, no URLs. IMPORTANT: For any sensitive/destructive action (sending messages, deleting things, posting, etc.), run approval.sh request "<description>" FIRST and wait for the result before proceeding. Tell the caller to check their phone. ';
+      var voicePrefix = '[VOICE CALL] Respond concisely for speech. No markdown, no lists, no URLs. IMPORTANT: For any sensitive/destructive action (sending messages, deleting things, posting, etc.), run approval.sh request "<description>" FIRST and wait for the result. Tell the caller "I\'m sending a notification to your phone now for you to approve." If the result is "timeout", "no_devices", or "no_devices_reached", offer voice confirmation as fallback. ';
       
       // Use the main agent session - always route to main session
       var mainSessionKey = 'agent:main:main';
@@ -581,10 +587,15 @@ class ClawdTalkClient {
       const requestId = result.request_id;
       const devicesNotified = result.devices_notified || 0;
       
-      this.log('INFO', 'Approval created: ' + requestId + ' (devices: ' + devicesNotified + ')');
+      const devicesFailed = result.devices_failed || 0;
+      
+      this.log('INFO', 'Approval created: ' + requestId + ' (notified: ' + devicesNotified + ', failed: ' + devicesFailed + ')');
       
       if (devicesNotified === 0) {
-        return 'No devices registered. You need to log into the mobile app first.';
+        if (devicesFailed > 0) {
+          return 'no_devices_reached';
+        }
+        return 'no_devices';
       }
       
       // Wait for WebSocket notification (with timeout fallback)
@@ -597,7 +608,7 @@ class ClawdTalkClient {
       } else if (decision === 'denied') {
         return 'denied';
       } else if (decision === 'timeout' || decision === 'expired') {
-        return 'The approval request timed out. Check if your phone received it.';
+        return 'timeout';
       } else {
         return 'Approval result: ' + decision;
       }
