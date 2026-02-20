@@ -746,6 +746,7 @@ Environment variables for the Python missions API:
 ## Troubleshooting
 
 - **Auth failed**: Regenerate API key at clawdtalk.com
+- **Gateway token/port changed**: Re-run `./setup.sh` to update skill-config.json with the new values
 - **Empty responses**: Run `./setup.sh` and restart gateway
 - **Slow responses**: Try a faster model in your gateway config
 - **Debug mode**: `DEBUG=1 ./scripts/connect.sh restart`

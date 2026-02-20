@@ -32,13 +32,9 @@ const RECONNECT_DELAY_MIN = 5000;
 const RECONNECT_DELAY_MAX = 180000;
 const DEFAULT_GREETING = "Hey, what's up?";
 
-// Gateway config paths
-const CLAWDBOT_CONFIG_PATHS = [
-  path.join(process.env.HOME || '/home/node', '.clawdbot', 'clawdbot.json'),
-  path.join(process.env.HOME || '/home/node', '.openclaw', 'openclaw.json'),
-  '/home/node/.clawdbot/clawdbot.json',
-  '/home/node/.openclaw/openclaw.json',
-];
+// Gateway defaults (overridden by skill-config.json values set during setup)
+const DEFAULT_GATEWAY_URL = 'http://127.0.0.1:18789';
+const DEFAULT_AGENT_ID = 'main';
 
 // Default voice context with drip progress updates
 const DEFAULT_VOICE_CONTEXT = `[VOICE CALL ACTIVE] Voice call in progress. Speech is transcribed to text. Your response is converted to speech via TTS.
@@ -58,54 +54,6 @@ DRIP PROGRESS UPDATES:
 - Be specific about what you're doing, not generic. "Looking at your calendar" not "Processing..."
 - These updates are spoken aloud immediately, so they fill silence while you work.
 - Don't wait until the end to summarize — drip information as you find it.`;
-
-function loadGatewayConfig() {
-  // Collect config from all paths, prioritizing ones with valid tokens
-  var bestConfig = null;
-  var configWithToken = null;
-  
-  for (var i = 0; i < CLAWDBOT_CONFIG_PATHS.length; i++) {
-    try {
-      if (fs.existsSync(CLAWDBOT_CONFIG_PATHS[i])) {
-        var config = JSON.parse(fs.readFileSync(CLAWDBOT_CONFIG_PATHS[i], 'utf8'));
-        var port = (config.gateway && config.gateway.port) || 18789;
-        var token = resolveEnvVar((config.gateway && config.gateway.auth && config.gateway.auth.token) || '');
-        
-        // Find the main agent ID (first agent or one marked default)
-        var mainAgentId = 'main';
-        if (config.agents && config.agents.list && config.agents.list.length > 0) {
-          var defaultAgent = config.agents.list.find(function(a) { return a.default; });
-          mainAgentId = defaultAgent ? defaultAgent.id : config.agents.list[0].id;
-        }
-        
-        var result = { 
-          toolsUrl: 'http://127.0.0.1:' + port + '/tools/invoke',
-          token: token,
-          mainAgentId: mainAgentId
-        };
-        
-        // Keep first config as fallback
-        if (!bestConfig) bestConfig = result;
-        
-        // If this config has a token, use it immediately
-        if (token) {
-          configWithToken = result;
-          break;
-        }
-      }
-    } catch (e) {}
-  }
-  
-  // Return config with token, or best available, or defaults
-  if (configWithToken) return configWithToken;
-  if (bestConfig) return bestConfig;
-  var defaultPort = 18789;
-  return {
-    toolsUrl: 'http://127.0.0.1:' + defaultPort + '/tools/invoke',
-    token: process.env.CLAWDBOT_GATEWAY_TOKEN || '',
-    mainAgentId: 'main'
-  };
-}
 
 // Parse command line args for server override
 function parseArgs() {
@@ -199,10 +147,11 @@ class ClawdTalkClient {
   }
 
   loadSkillConfig() {
-    var gwConfig = loadGatewayConfig();
-    this.gatewayToolsUrl = gwConfig.toolsUrl;
-    this.gatewayToken = gwConfig.token;
-    this.mainAgentId = gwConfig.mainAgentId;
+    // Gateway config from skill-config.json (set during setup.sh) with env var fallbacks
+    var gatewayUrl = resolveEnvVar(this.config.gateway_url || '') || process.env.OPENCLAW_GATEWAY_URL || process.env.CLAWDBOT_GATEWAY_URL || DEFAULT_GATEWAY_URL;
+    this.gatewayToolsUrl = gatewayUrl.replace(/\/$/, '') + '/tools/invoke';
+    this.gatewayToken = resolveEnvVar(this.config.gateway_token || '') || process.env.OPENCLAW_GATEWAY_TOKEN || process.env.CLAWDBOT_GATEWAY_TOKEN || '';
+    this.mainAgentId = this.config.agent_id || DEFAULT_AGENT_ID;
 
     this.greeting = this.config.greeting || DEFAULT_GREETING;
     

@@ -103,6 +103,12 @@ if [ -n "$GATEWAY_CONFIG" ] && [ -f "$GATEWAY_CONFIG" ]; then
     main_agent_name=$(jq -r '(.agents.list[]? | select(.default == true or .id == "main") | .name) // "Assistant"' "$GATEWAY_CONFIG" 2>/dev/null || echo "Assistant")
     main_agent_workspace=$(jq -r '(.agents.list[]? | select(.default == true or .id == "main") | .workspace) // .agents.defaults.workspace // "/home/node/clawd"' "$GATEWAY_CONFIG" 2>/dev/null || echo "/home/node/clawd")
 
+    # Extract gateway connection details for skill-config.json (so ws-client doesn't need to read gateway config at runtime)
+    gateway_port=$(jq -r '.gateway.port // 18789' "$GATEWAY_CONFIG" 2>/dev/null || echo "18789")
+    gateway_token=$(jq -r '.gateway.auth.token // ""' "$GATEWAY_CONFIG" 2>/dev/null || echo "")
+    gateway_url="http://127.0.0.1:${gateway_port}"
+    main_agent_id=$(jq -r '(.agents.list[]? | select(.default == true) | .id) // (.agents.list[0]?.id) // "main"' "$GATEWAY_CONFIG" 2>/dev/null || echo "main")
+
     if [ "$has_voice" = "true" ]; then
         echo "   ✓ Voice agent already configured in gateway"
         voice_agent_added=true
@@ -216,6 +222,19 @@ else
     greeting="Hey, what's up?"
 fi
 
+gateway_url_json="null"
+gateway_token_json="null"
+agent_id_json="null"
+if [ -n "$gateway_url" ]; then
+    gateway_url_json="\"$gateway_url\""
+fi
+if [ -n "$gateway_token" ]; then
+    gateway_token_json="\"$gateway_token\""
+fi
+if [ -n "$main_agent_id" ]; then
+    agent_id_json="\"$main_agent_id\""
+fi
+
 cat > "$CONFIG_FILE" << EOF
 {
   "api_key": $api_key_json,
@@ -223,11 +242,14 @@ cat > "$CONFIG_FILE" << EOF
   "owner_name": $owner_name_json,
   "agent_name": $agent_name_json,
   "greeting": "$greeting",
-  "max_conversation_turns": 20
+  "gateway_url": $gateway_url_json,
+  "gateway_token": $gateway_token_json,
+  "agent_id": $agent_id_json
 }
 EOF
 
 echo "   ✓ Configuration saved to: $CONFIG_FILE"
+echo "   ⚠️  Note: If you change your gateway token or port later, re-run setup.sh to update."
 
 # Display next steps
 echo ""
