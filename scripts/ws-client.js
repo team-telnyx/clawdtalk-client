@@ -448,6 +448,16 @@ class ClawdTalkClient {
       return;
     }
 
+    // Handle walkie_request (Clawdie-Talkie push-to-talk)
+    if (event === 'walkie_request') {
+      var walkieRequestId = msg.request_id;
+      var walkieTranscript = msg.transcript || '';
+      var walkieSessionKey = msg.session_key || 'agent:main:main';
+      this.log('INFO', 'Walkie request [' + walkieRequestId + ']: ' + walkieTranscript.substring(0, 100));
+      this.handleWalkieRequest(walkieRequestId, walkieTranscript, walkieSessionKey);
+      return;
+    }
+
     // Log unhandled events for debugging
     if (process.env.DEBUG) {
       this.log('DEBUG', 'Unhandled event: ' + event);
@@ -543,6 +553,81 @@ class ClawdTalkClient {
         this.log('ERROR', 'Deep tool failed: ' + err.message);
         this.sendDeepToolResult(requestId, 'Sorry, I had trouble with that request.');
       }
+    }
+  }
+
+  // ── Walkie-Talkie Handler ──────────────────────────────────
+
+  async handleWalkieRequest(requestId, transcript, sessionKey) {
+    try {
+      var voicePrefix = '[WALKIE-TALKIE] Push-to-talk message. Respond concisely for speech (1-3 sentences). No markdown, no lists, no URLs. ';
+
+      this.log('DEBUG', 'Walkie calling Gateway: url=' + this.gatewayToolsUrl + ' session=' + sessionKey);
+
+      var response = await fetch(this.gatewayToolsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + this.gatewayToken
+        },
+        body: JSON.stringify({
+          tool: 'sessions_send',
+          args: {
+            sessionKey: sessionKey,
+            message: voicePrefix + transcript,
+            timeoutSeconds: 90
+          }
+        }),
+        signal: AbortSignal.timeout(120000)
+      });
+
+      if (!response.ok) {
+        var errText = await response.text();
+        this.log('ERROR', 'Walkie sessions_send failed: ' + response.status + ' ' + errText);
+        this.sendWalkieResponse(requestId, null, 'Failed to reach the agent.');
+        return;
+      }
+
+      var result = await response.json();
+
+      // Extract reply (same logic as deep tool)
+      var reply = '';
+      if (result.result && result.result.details && result.result.details.reply) {
+        reply = result.result.details.reply;
+      } else if (result.result && result.result.content) {
+        var content = result.result.content;
+        if (Array.isArray(content) && content[0] && content[0].text) {
+          try {
+            var parsed = JSON.parse(content[0].text);
+            reply = parsed.reply || '';
+          } catch (e) {
+            reply = content[0].text;
+          }
+        }
+      }
+
+      if (!reply || reply === 'HEARTBEAT_OK') {
+        reply = 'Done.';
+      }
+
+      var cleanedReply = this.cleanForVoice(reply);
+      this.sendWalkieResponse(requestId, cleanedReply, null);
+      this.log('INFO', 'Walkie complete [' + requestId + ']: ' + cleanedReply.substring(0, 100));
+
+    } catch (err) {
+      this.log('ERROR', 'Walkie request failed: ' + err.message);
+      this.sendWalkieResponse(requestId, null, 'Request failed: ' + err.message);
+    }
+  }
+
+  sendWalkieResponse(requestId, reply, error) {
+    if (this.ws && this.ws.readyState === 1) {
+      this.ws.send(JSON.stringify({
+        type: 'walkie_response',
+        request_id: requestId,
+        reply: reply,
+        error: error || undefined
+      }));
     }
   }
 
