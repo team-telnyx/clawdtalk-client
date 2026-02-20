@@ -260,7 +260,48 @@ else
 fi
 echo ""
 
+# Check gateway.tools.allow for sessions_send
+echo ""
+echo "🔐 Checking gateway tools policy..."
+sessions_send_allowed=false
+if [ -n "$GATEWAY_CONFIG" ] && [ -f "$GATEWAY_CONFIG" ]; then
+    has_allow=$(jq -r '(.gateway.tools.allow // []) | map(select(. == "sessions_send")) | length > 0' "$GATEWAY_CONFIG" 2>/dev/null || echo "false")
+    if [ "$has_allow" = "true" ]; then
+        echo "   ✓ sessions_send is allowed on the Gateway HTTP tools API"
+        sessions_send_allowed=true
+    else
+        echo ""
+        echo "   ⚠️  sessions_send is NOT allowed on the Gateway HTTP tools API"
+        echo ""
+        echo "   Voice calls route requests to your main agent via sessions_send."
+        echo "   OpenClaw blocks this tool over HTTP by default for security."
+        echo "   Without it, voice calls connect but the AI can't process any requests —"
+        echo "   it hears you, but can't act (all tool calls silently fail with 404)."
+        echo ""
+        read -p "   Add sessions_send to gateway.tools.allow? (Y/n): " add_allow
+        if [[ ! "$add_allow" =~ ^[Nn]$ ]]; then
+            tmp_config=$(mktemp)
+            if jq '.gateway.tools.allow = ((.gateway.tools.allow // []) + ["sessions_send"] | unique)' "$GATEWAY_CONFIG" > "$tmp_config" 2>/dev/null; then
+                mv "$tmp_config" "$GATEWAY_CONFIG"
+                echo "   ✓ Added sessions_send to gateway.tools.allow"
+                sessions_send_allowed=true
+                # Restart gateway
+                if command -v "$CLI_NAME" &> /dev/null; then
+                    echo "   ↻ Restarting gateway..."
+                    $CLI_NAME gateway restart 2>/dev/null && echo "   ✓ Gateway restarted" || echo "   ⚠️  Run '$CLI_NAME gateway restart' manually"
+                fi
+            else
+                rm -f "$tmp_config"
+                echo "   ⚠️  Could not auto-configure — add it manually (see below)"
+            fi
+        else
+            echo "   ⚠️  Skipped — voice call requests won't work until this is added"
+        fi
+    fi
+fi
+
 if [ "$voice_agent_added" = true ]; then
+    echo ""
     echo "✅ Voice agent is configured and ready."
 else
     echo "⚠️  Voice agent not auto-configured. Add it manually:"
@@ -276,6 +317,27 @@ else
     echo '   "gateway": { "http": { "endpoints": { "chatCompletions": { "enabled": true } } } }'
     echo ""
     echo "   Then restart: $CLI_NAME gateway restart"
+fi
+
+if [ "$sessions_send_allowed" != true ]; then
+    echo ""
+    echo "⚠️  Gateway tools policy: sessions_send must be allowed for voice calls."
+    echo ""
+    echo "   Voice calls work by routing your spoken requests to the main agent session"
+    echo "   via the Gateway HTTP tools API (/tools/invoke → sessions_send). OpenClaw"
+    echo "   blocks sessions_send over HTTP by default as a security measure. Without"
+    echo "   this, the AI connects to your call but can't do anything — all requests"
+    echo "   silently fail."
+    echo ""
+    config_path="~/.openclaw/openclaw.json"
+    if [ "$CLI_NAME" = "clawdbot" ]; then
+        config_path="~/.clawdbot/clawdbot.json"
+    fi
+    echo "   Add to $config_path:"
+    echo '   { "gateway": { "tools": { "allow": ["sessions_send"] } } }'
+    echo ""
+    echo "   Or via CLI:"
+    echo "   $CLI_NAME config patch '{\"gateway\":{\"tools\":{\"allow\":[\"sessions_send\"]}}}'"
 fi
 
 echo ""

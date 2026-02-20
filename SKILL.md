@@ -715,6 +715,55 @@ Track every number's status in mission memory. Retry based on recipient type:
 
 ---
 
+## Approval Requests (Sensitive Actions)
+
+For destructive or sensitive actions during voice calls, request user approval first:
+
+```bash
+./scripts/approval.sh request "Delete GitHub repo myproject"
+./scripts/approval.sh request "Send $500 to John" --biometric
+./scripts/approval.sh request "Post tweet about X" --details "Full text: ..."
+```
+
+**When to request approval:**
+- Deleting repos, files, or data
+- Sending money or making purchases
+- Posting to social media
+- Sending emails/messages to others
+- Any irreversible action
+
+**Response values:**
+- `approved` → Execute the action, confirm completion
+- `denied` → Tell user "Okay, I won't do that"
+- `timeout` → "I didn't get a response, should I try again?"
+- `no_devices` → Skip approval, action not executed (no mobile app)
+
+**Example flow in voice call:**
+1. User: "Delete my test-repo on GitHub"
+2. You: "I'll need your approval for that. Check your phone."
+3. Run: `approval.sh request "Delete GitHub repo test-repo"`
+4. If approved: Delete the repo, then say "Done, test-repo has been deleted"
+5. If denied: "Got it, I won't delete it"
+
+## Gateway Requirements
+
+Voice calls route requests to the main agent via `sessions_send`. This tool is **blocked by default** on the Gateway HTTP tools API. You must explicitly allow it:
+
+```json5
+// In openclaw.json → gateway.tools
+{
+  "gateway": {
+    "tools": {
+      "allow": ["sessions_send"]
+    }
+  }
+}
+```
+
+Or via CLI: `openclaw config patch '{"gateway":{"tools":{"allow":["sessions_send"]}}}'`
+
+Without this, voice calls will connect but the agent won't be able to process any requests (deep tool calls return 404).
+
 ## ❌ Common Pitfalls
 
 | Mistake | Symptom | Fix |
@@ -724,8 +773,6 @@ Track every number's status in mission memory. Retry based on recipient type:
 | Not checking mission status after step changes | Mission stuck "running" forever | Run decision tree after every step |
 | Leaving polling crons running | Wasted resources, stale polls | Delete cron on any terminal state |
 | Not verifying `list-linked-agents` after `setup-agent` | Agent not linked, events invisible | Always verify, fix with `link-agent` |
-
----
 
 ## Configuration
 
