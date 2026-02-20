@@ -9,6 +9,114 @@ metadata: {"clawdbot":{"emoji":"📞","requires":{"bins":["bash","node","jq","py
 
 Voice calling, SMS messaging, and AI Missions for Clawdbot. Call your bot by phone, send texts, or run autonomous multi-step outreach campaigns — powered by ClawdTalk.
 
+---
+
+# ⚠️ CRITICAL: YOU OWN THE MISSION LIFECYCLE
+
+**The server does NOT automatically update plan steps or mission status.** That is YOUR job as the bot. If you don't update steps and complete the mission, the UI will show "Running" forever with all steps "Pending".
+
+## Your Responsibilities
+
+For every mission, YOU must:
+1. **Update plan steps** — mark each step `in_progress` → `completed` (or `failed`)
+2. **Log events** — after every significant action
+3. **Poll for completion** — check if scheduled calls/SMS finished
+4. **Complete the mission** — mark the run as `succeeded` or `failed`
+5. **Clean up** — remove any polling cron jobs when the mission ends
+
+The UI reflects exactly what you tell it. No updates from you = no updates on screen.
+
+---
+
+# 🚨 MANDATORY: SAVE TO MEMORY AFTER EVERY ACTION
+
+**Every significant action MUST be persisted using `save-memory` or `append-memory` IMMEDIATELY after the action succeeds.** The frontend reads from server memory. If you don't save it, it doesn't show up. `log-event` alone is NOT enough.
+
+> **Rule: If you did something, save it to memory. No exceptions. No "I'll do it later." Do it NOW.**
+
+Example (scheduling an SMS):
+```bash
+# 1. Schedule it
+python scripts/telnyx_api.py schedule-sms $AID "$TO" "$FROM" "$DATETIME" "$MESSAGE" $MID $RID $STEP_ID
+
+# 2. IMMEDIATELY save to memory
+python scripts/telnyx_api.py append-memory "$SLUG" "scheduled_events" \
+  '{"event_id": "<id>", "type": "sms", "to": "<to>", "message": "<msg>", "scheduled_at": "<dt>", "step_id": "<step>"}'
+
+# 3. Then log the event
+python scripts/telnyx_api.py log-event $MID $RID custom "Scheduled SMS event_id=<id>" $STEP_ID
+```
+
+**Skipping step 2 is the #1 cause of "nothing shows on the frontend" bugs.**
+
+---
+
+# 🚨 MANDATORY: CHECK MISSION STATUS AFTER EVERY STEP
+
+**After completing or failing ANY step, you MUST check whether the mission should be completed or failed.** Never leave a mission in "running" state when it's actually done or dead.
+
+> **Rule: After every step change, ask yourself: is this mission finished?**
+
+### Decision tree (run after EVERY step):
+
+```
+Step finished →
+  ├── Succeeded?
+  │     ├── All steps done? → COMPLETE MISSION (update-run succeeded)
+  │     ├── More steps remain? → Continue to next step
+  │     └── Only verify left? → Set up polling cron
+  └── Failed?
+        ├── Recoverable (retry/reschedule)? → Retry
+        └── Unrecoverable? → FAIL MISSION NOW:
+              1. update-step <step_id> failed
+              2. log-event error "Failed: <reason>" <step_id>
+              3. save-memory "$SLUG" "error_<step_id>" '{"error": "...", "recoverable": false}'
+              4. update-run $MID $RID failed
+              5. save-memory "$SLUG" "result" '{"status": "failed", "reason": "...", "failed_step": "..."}'
+              6. Clean up any polling cron jobs
+```
+
+**A mission stuck in "running" when it's actually done or dead is a bug. The user sees it and thinks work is still happening.**
+
+---
+
+# Architecture Overview
+
+## How It Fits Together
+
+```
+┌──────────────┐     ┌──────────────────┐     ┌──────────────┐
+│  You (Bot)   │────▶│  ClawdTalk Server │────▶│  Telnyx API  │
+│              │     │  (dev/prod)       │     │  (cloud)     │
+│ telnyx_api.py│     │  Local DB + proxy │     │  Executes    │
+│              │     │  to Telnyx        │     │  calls/SMS   │
+└──────────────┘     └──────────────────┘     └──────────────┘
+```
+
+- **telnyx_api.py** — Python CLI script. Every command you run goes through this. It talks to the ClawdTalk server, never directly to Telnyx.
+- **ClawdTalk Server** — Node.js backend. Stores missions, assistants, and events in a local Postgres DB. Proxies requests to the Telnyx API.
+- **Telnyx API** — Cloud service. Actually makes the calls and sends the SMS at the scheduled time.
+
+## Key Files
+
+| File | Purpose |
+|---|---|
+| `scripts/telnyx_api.py` | CLI tool for all mission/assistant/event operations |
+| `scripts/connect.sh` | WebSocket client for inbound voice call routing |
+| `skill-config.json` | API key and server URL |
+| `.missions_state.json` | Local state tracking for active missions |
+| `.connect.log` | WebSocket connection logs |
+
+## Two Sets of IDs
+
+Every entity exists in two places with different IDs:
+- **Local DB ID** — what the ClawdTalk server returns (e.g. `3df24dde-...`)
+- **Telnyx ID** — what the Telnyx API uses internally
+
+The script always works with local IDs. You don't need to worry about Telnyx IDs.
+
+---
+
 ## Quick Start
 
 1. **Sign up** at [clawdtalk.com](https://clawdtalk.com)
@@ -285,20 +393,58 @@ python scripts/telnyx_api.py schedule-sms <assistant_id> "+15551234567" "+155598
 
 ## Phase 4: Monitoring Call Completion
 
+### ⚠️ THIS IS THE MOST IMPORTANT PART
+
+After scheduling a call or SMS, **Telnyx executes it autonomously** at the scheduled time. You need to **poll** to find out when it's done, then update the mission accordingly.
+
 ### Check Scheduled Event Status
 
 ```bash
 python scripts/telnyx_api.py get-event <assistant_id> <event_id>
 ```
 
+### Use Cron Jobs to Poll
+
+Use your bot's cron system to schedule polling. **Do NOT block the main session waiting.** Match the poll interval to the expected wait time:
+
+| Expected completion | Poll interval | Example |
+|---|---|---|
+| < 5 minutes | Every 30 seconds | SMS sent 1 min from now |
+| 5–30 minutes | Every 2–5 minutes | Call scheduled in 15 min |
+| 1–24 hours | Every 15–30 minutes | Call scheduled for tonight |
+| Days/weeks | Every 4–8 hours | Call scheduled for next week |
+
+**If you know the exact scheduled time**, don't start polling until after that time. Schedule your first poll for `scheduled_time + 2 minutes`.
+
+### Cron Job Pattern
+
+When you schedule a call/SMS, create a cron job to poll for it:
+
+```
+Create cron: poll at appropriate interval
+  → Run get-event <assistant_id> <event_id>
+  → If completed: update step, log event, complete mission if last step, DELETE THIS CRON
+  → If failed: update step as failed, log error, DELETE THIS CRON
+  → If pending/in_progress: do nothing, cron runs again at next interval
+```
+
+**⚠️ ALWAYS clean up cron jobs when a mission reaches a terminal state (completed, failed, cancelled). Never leave polling crons running after a mission ends.**
+
+### Adjusting Poll Frequency
+
+You can update the cron interval as circumstances change:
+- Scheduled for 2 weeks from now? Start with 8-hour polling.
+- As the scheduled time approaches (within 1 hour), tighten to 5-minute intervals.
+- After the scheduled time passes, tighten to 30-second intervals.
+
 ### Event Status Values
 
 | Status | Meaning | Action |
 |--------|---------|--------|
-| `pending` | Waiting for scheduled time | Wait and check again later |
-| `in_progress` | Call/SMS in progress | Check again in a few minutes |
-| `completed` | Finished successfully | Get conversation_id, fetch insights |
-| `failed` | Failed after retries | Consider rescheduling |
+| `pending` | Waiting for scheduled time | Keep polling |
+| `in_progress` | Call/SMS in progress | Keep polling |
+| `completed` | Finished successfully | Update step, get insights if call |
+| `failed` | Failed after retries | Update step as failed, consider retry |
 
 ### Call Status Values (Phone Calls Only)
 
@@ -424,6 +570,61 @@ python scripts/telnyx_api.py append-memory <slug> <key> <item_json>
 python scripts/telnyx_api.py init <name> <instructions> <request> [steps_json]
 python scripts/telnyx_api.py setup-agent <slug> <name> <instructions> <greeting>
 python scripts/telnyx_api.py complete <slug> <mission_id> <run_id> <summary> [payload_json]
+```
+
+---
+
+# Complete Example: SMS Mission with Cron Polling
+
+Here's the full flow for an SMS mission with proper lifecycle tracking and cron-based polling:
+
+```bash
+# 1. Init mission
+python scripts/telnyx_api.py init "SMS Test 003" \
+  "Send a test SMS to +13322200013" \
+  "SMS test with full tracking" \
+  '[{"step_id": "setup", "description": "Create SMS agent", "sequence": 1},
+    {"step_id": "sms", "description": "Schedule SMS", "sequence": 2},
+    {"step_id": "verify", "description": "Verify delivery", "sequence": 3}]'
+# Save: mission_id, run_id
+
+# 2. Step 1: Setup agent
+python scripts/telnyx_api.py update-step $MISSION_ID $RUN_ID setup in_progress
+python scripts/telnyx_api.py log-event $MISSION_ID $RUN_ID step_started "Starting: Create SMS agent" setup
+
+python scripts/telnyx_api.py setup-agent "sms-test-003" "SMS Agent" "Send test messages" "Test from bot"
+# Save: assistant_id, phone_number
+
+python scripts/telnyx_api.py update-step $MISSION_ID $RUN_ID setup completed
+python scripts/telnyx_api.py log-event $MISSION_ID $RUN_ID step_completed "Completed: Created assistant $ASSISTANT_ID" setup
+
+# 3. Step 2: Schedule SMS
+python scripts/telnyx_api.py update-step $MISSION_ID $RUN_ID sms in_progress
+python scripts/telnyx_api.py log-event $MISSION_ID $RUN_ID step_started "Starting: Schedule SMS" sms
+
+python scripts/telnyx_api.py schedule-sms $ASSISTANT_ID "+13322200013" "$PHONE" "2026-02-19T18:43:00Z" \
+  "What do you call a bear with no teeth? A gummy bear!" \
+  $MISSION_ID $RUN_ID sms
+# Save: event_id
+
+python scripts/telnyx_api.py update-step $MISSION_ID $RUN_ID sms completed
+python scripts/telnyx_api.py log-event $MISSION_ID $RUN_ID step_completed "Completed: SMS scheduled" sms
+
+# 4. Step 3: Verify delivery — CREATE A CRON JOB TO POLL
+python scripts/telnyx_api.py update-step $MISSION_ID $RUN_ID verify in_progress
+python scripts/telnyx_api.py log-event $MISSION_ID $RUN_ID step_started "Starting: Poll for delivery" verify
+
+# >>> Create a cron job that fires AFTER the scheduled time <<<
+# >>> Cron runs: get-event $ASSISTANT_ID $EVENT_ID <<<
+# >>> On completed: update-step verify completed, log-event, update-run succeeded, DELETE CRON <<<
+# >>> On failed: update-step verify failed, log-event, update-run failed, DELETE CRON <<<
+# >>> On pending/in_progress: do nothing, cron fires again next interval <<<
+
+# 5. (Cron fires, detects completion)
+python scripts/telnyx_api.py update-step $MISSION_ID $RUN_ID verify completed
+python scripts/telnyx_api.py log-event $MISSION_ID $RUN_ID step_completed "Completed: SMS delivered" verify
+python scripts/telnyx_api.py update-run $MISSION_ID $RUN_ID succeeded
+# DELETE the polling cron job!
 ```
 
 ---

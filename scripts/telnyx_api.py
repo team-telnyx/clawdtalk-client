@@ -498,8 +498,14 @@ def schedule_call(
     scheduled_time: str,
     mission_id: str,
     mission_run_id: str,
+    step_id: str = None,
 ) -> str:
-    """Schedule a phone call. Returns event id."""
+    """Schedule a phone call. Returns event id.
+
+    When step_id is provided, the server automatically updates the corresponding
+    plan step to 'completed' when the call finishes, and marks the mission as
+    'succeeded' once all scheduled events reach a terminal state.
+    """
     data = {
         "channel": "call",
         "to": end_user_phone,
@@ -508,6 +514,8 @@ def schedule_call(
         "mission_id": mission_id,
         "run_id": mission_run_id,
     }
+    if step_id:
+        data["step_id"] = step_id
 
     result = api_request(
         "POST", f"/assistants/{assistant_id}/events", data
@@ -524,8 +532,15 @@ def schedule_sms(
     agent_phone: str,
     scheduled_time: str,
     text: str,
+    mission_id: str = None,
+    mission_run_id: str = None,
+    step_id: str = None,
 ) -> str:
-    """Schedule an SMS. Returns event id."""
+    """Schedule an SMS. Returns event id.
+
+    When mission_id/run_id/step_id are provided, the server automatically
+    updates the plan step and mission status when the SMS completes.
+    """
     data = {
         "channel": "sms",
         "to": end_user_phone,
@@ -533,6 +548,12 @@ def schedule_sms(
         "scheduled_at": scheduled_time,
         "text_body": text,
     }
+    if mission_id:
+        data["mission_id"] = mission_id
+    if mission_run_id:
+        data["run_id"] = mission_run_id
+    if step_id:
+        data["step_id"] = step_id
 
     result = api_request(
         "POST", f"/assistants/{assistant_id}/events", data
@@ -804,8 +825,10 @@ Commands:
     assign-phone <phone_id> <connection_id> [voice|sms]
 
   Scheduled Events:
-    schedule-call <assistant_id> <to_phone> <from_phone> <datetime> <mission_id> <run_id>
-    schedule-sms <assistant_id> <to_phone> <from_phone> <datetime> <text>
+    schedule-call <assistant_id> <to_phone> <from_phone> <datetime> <mission_id> <run_id> [step_id]
+      step_id links to a plan step — server auto-syncs step status when call completes
+    schedule-sms <assistant_id> <to_phone> <from_phone> <datetime> <text> [mission_id] [run_id] [step_id]
+      mission_id/run_id/step_id enable auto-sync of plan steps and mission status
     get-event <assistant_id> <event_id>
     cancel-scheduled-event <assistant_id> <event_id>
     list-events-assistant <assistant_id>
@@ -836,7 +859,7 @@ Commands:
 Examples:
   python telnyx_api.py create-mission "Find contractors" "Call and negotiate"
   python telnyx_api.py create-run mis_abc123 '{"request": "Find window washers"}'
-  python telnyx_api.py schedule-call ast_xyz "+15551234567" "+15559876543" "2024-12-01T15:00:00Z" mis_abc run_def
+  python telnyx_api.py schedule-call ast_xyz "+15551234567" "+15559876543" "2024-12-01T15:00:00Z" mis_abc run_def call_1
 """)
 
 
@@ -951,10 +974,15 @@ def main():
 
         # Scheduled Events
         elif cmd == "schedule-call":
-            # schedule-call <assistant_id> <to> <from> <datetime> <mission_id> <run_id>
-            schedule_call(args[0], args[1], args[2], args[3], args[4], args[5])
+            # schedule-call <assistant_id> <to> <from> <datetime> <mission_id> <run_id> [step_id]
+            step_id = args[6] if len(args) > 6 else None
+            schedule_call(args[0], args[1], args[2], args[3], args[4], args[5], step_id)
         elif cmd == "schedule-sms":
-            schedule_sms(args[0], args[1], args[2], args[3], args[4])
+            # schedule-sms <assistant_id> <to> <from> <datetime> <text> [mission_id] [run_id] [step_id]
+            sms_mission_id = args[5] if len(args) > 5 else None
+            sms_run_id = args[6] if len(args) > 6 else None
+            sms_step_id = args[7] if len(args) > 7 else None
+            schedule_sms(args[0], args[1], args[2], args[3], args[4], sms_mission_id, sms_run_id, sms_step_id)
         elif cmd == "get-event":
             get_scheduled_event(args[0], args[1])
         elif cmd == "cancel-scheduled-event":
