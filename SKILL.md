@@ -183,6 +183,25 @@ For destructive or sensitive actions during voice calls, request user approval f
 4. If approved: Delete the repo, then say "Done, test-repo has been deleted"
 5. If denied: "Got it, I won't delete it"
 
+## Gateway Requirements
+
+Voice calls route requests to the main agent via `sessions_send`. This tool is **blocked by default** on the Gateway HTTP tools API. You must explicitly allow it:
+
+```json5
+// In openclaw.json → gateway.tools
+{
+  "gateway": {
+    "tools": {
+      "allow": ["sessions_send"]
+    }
+  }
+}
+```
+
+Or via CLI: `openclaw config patch '{"gateway":{"tools":{"allow":["sessions_send"]}}}'`
+
+Without this, voice calls will connect but the agent won't be able to process any requests (deep tool calls return 404).
+
 ## Configuration
 
 Edit `skill-config.json`:
