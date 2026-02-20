@@ -158,41 +158,51 @@ else
     echo "   ⚠️  No package.json found"
 fi
 
-# Detect user and agent names from workspace files
+# Detect user and agent names
 echo ""
-echo "👤 Detecting names from workspace..."
+echo "👤 Setting up names..."
 
 WORKSPACE="${main_agent_workspace:-$HOME/.openclaw/workspace}"
 owner_name=""
 agent_name=""
 
-# Try to get owner name from USER.md ("What to call them:" or "Name:")
-if [ -f "$WORKSPACE/USER.md" ]; then
-    # First try "What to call them:" for the preferred name
-    owner_name=$(grep -i "what to call them:" "$WORKSPACE/USER.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
-    # Fall back to "Name:" if not found
-    if [ -z "$owner_name" ]; then
-        owner_name=$(grep -i "^- \*\*Name:" "$WORKSPACE/USER.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
-        # Extract first name only
-        owner_name=$(echo "$owner_name" | awk '{print $1}')
+# Offer to auto-detect from workspace files (opt-in to address security scanner flag)
+auto_detect="y"
+if [ -f "$WORKSPACE/USER.md" ] || [ -f "$WORKSPACE/IDENTITY.md" ]; then
+    read -p "   Auto-detect names from workspace? (Y/n): " auto_detect
+    auto_detect="${auto_detect:-y}"
+fi
+
+if [[ "$auto_detect" =~ ^[Yy]$ ]]; then
+    # Try to get owner name from USER.md ("What to call them:" or "Name:")
+    if [ -f "$WORKSPACE/USER.md" ]; then
+        owner_name=$(grep -i "what to call them:" "$WORKSPACE/USER.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
+        if [ -z "$owner_name" ]; then
+            owner_name=$(grep -i "^- \*\*Name:" "$WORKSPACE/USER.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
+            owner_name=$(echo "$owner_name" | awk '{print $1}')
+        fi
+    fi
+
+    # Try to get agent name from IDENTITY.md
+    if [ -f "$WORKSPACE/IDENTITY.md" ]; then
+        agent_name=$(grep -i "^- \*\*Name:" "$WORKSPACE/IDENTITY.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
     fi
 fi
 
-# Try to get agent name from IDENTITY.md
-if [ -f "$WORKSPACE/IDENTITY.md" ]; then
-    agent_name=$(grep -i "^- \*\*Name:" "$WORKSPACE/IDENTITY.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
+# If auto-detect didn't find names (or was skipped), ask manually
+if [ -z "$owner_name" ]; then
+    read -p "   Your name (for greeting): " owner_name
+fi
+if [ -z "$agent_name" ]; then
+    read -p "   Agent name (optional, press Enter to skip): " agent_name
 fi
 
 if [ -n "$owner_name" ]; then
     echo "   ✓ Owner name: $owner_name"
-else
-    echo "   ⚠️  Could not detect owner name from USER.md"
 fi
 
 if [ -n "$agent_name" ]; then
     echo "   ✓ Agent name: $agent_name"
-else
-    echo "   ⚠️  Could not detect agent name from IDENTITY.md"
 fi
 
 # Create skill-config.json
