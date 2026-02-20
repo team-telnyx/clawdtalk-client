@@ -62,6 +62,38 @@ check_config() {
     fi
 }
 
+check_gateway_tools() {
+    # Check if sessions_send is allowed on the gateway /tools/invoke endpoint
+    # Without this, the voice assistant can't proxy questions to the Clawdbot
+    local config_paths=(
+        "$HOME/.openclaw/openclaw.json"
+        "$HOME/.clawdbot/clawdbot.json"
+    )
+    
+    for cfg in "${config_paths[@]}"; do
+        if [ -f "$cfg" ]; then
+            local tools_allow=$(jq -r '.gateway.tools.allow // [] | join(",")' "$cfg" 2>/dev/null)
+            if [ -z "$tools_allow" ] || ! echo "$tools_allow" | grep -q "sessions_send"; then
+                echo -e "${YELLOW}⚠️  Gateway missing 'sessions_send' in tools allowlist${NC}"
+                echo ""
+                echo "   The voice assistant needs sessions_send to proxy questions to your Clawdbot."
+                echo "   Add it to your config ($cfg):"
+                echo ""
+                echo '   "gateway": { "tools": { "allow": ["sessions_send"] } }'
+                echo ""
+                echo "   Or ask your Clawdbot to run:"
+                echo "   openclaw config set gateway.tools.allow '[\"sessions_send\"]'"
+                echo ""
+                return 1
+            fi
+            return 0
+        fi
+    done
+    
+    echo -e "${YELLOW}⚠️  No OpenClaw/Clawdbot config found. Gateway tools check skipped.${NC}"
+    return 0
+}
+
 check_dependencies() {
     for tool in node jq; do
         if ! command -v "$tool" &> /dev/null; then
@@ -201,6 +233,10 @@ show_status() {
         fi
     fi
     
+    # Check gateway tools
+    echo ""
+    check_gateway_tools 2>/dev/null && echo -e "Gateway tools: ${GREEN}sessions_send allowed${NC}" || true
+    
     echo ""
     echo "Configuration:"
     echo "============="
@@ -251,6 +287,7 @@ case "${CMD:-}" in
         print_status
         check_config
         check_dependencies
+        check_gateway_tools || true
         start_connection
         ;;
     stop)
@@ -261,6 +298,7 @@ case "${CMD:-}" in
         print_status
         check_config
         check_dependencies
+        check_gateway_tools || true
         restart_connection
         ;;
     status)

@@ -1,14 +1,27 @@
 # ClawdTalk Client
 
-Voice calling and SMS messaging for [Clawdbot](https://clawdbot.com). Talk to your bot by phone or exchange texts.
+Give your OpenClaw bot a phone number.
 
-Powered by [Telnyx](https://telnyx.com).
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/version-1.3.0-green.svg)](https://github.com/clawdbot/clawdtalk-client)
+
+Voice calling and SMS messaging for [Clawdbot](https://clawdbot.com). Talk to your bot by phone or exchange texts. Powered by [Telnyx](https://telnyx.com).
+
+## Architecture
+
+```
+Phone → Telnyx (STT) → ClawdTalk Server → WebSocket → OpenClaw Gateway → Agent → TTS → Phone
+          │                                      │
+          └── Speech-to-text                     └── Routes to /v1/chat/completions
+          │                                      │
+          └── Text-to-speech                     └── Bot processes like any message
+```
 
 ## Features
 
-- **Voice calls** — Real-time conversations with your bot via phone
-- **SMS messaging** — Send and receive text messages
-- **Tool integration** — Your bot's full capabilities, accessible by voice
+- **Voice calls**: Real-time conversations with your bot via phone
+- **SMS messaging**: Send and receive text messages
+- **Tool integration**: Your bot's full capabilities, accessible by voice
 
 ## Requirements
 
@@ -29,10 +42,7 @@ cd ~/clawd/skills/clawdtalk-client
 ./scripts/connect.sh start
 ```
 
-The setup script will:
-- Ask for your API key
-- Configure the voice agent in your gateway
-- Create `skill-config.json`
+The setup script will ask for your API key, configure the voice agent in your gateway, and create `skill-config.json`.
 
 ## Usage
 
@@ -47,7 +57,8 @@ Start the connection, then call your ClawdTalk number:
 ./scripts/connect.sh restart    # Restart
 ```
 
-**Keep it running:**
+Keep it running via crontab:
+
 ```bash
 # Add to crontab (crontab -e):
 @reboot cd ~/clawd/skills/clawdtalk-client && ./scripts/connect.sh start
@@ -92,7 +103,7 @@ Have the bot call you:
 
 ### Environment Variable Support
 
-Instead of storing credentials in plaintext, you can use `${ENV_VAR}` references:
+Instead of storing credentials in plaintext, use `${ENV_VAR}` references:
 
 ```json
 {
@@ -101,17 +112,19 @@ Instead of storing credentials in plaintext, you can use `${ENV_VAR}` references
 }
 ```
 
-Then set the variable in one of these locations (checked in order):
+Set the variable in one of these locations (checked in order):
 - `~/.openclaw/.env`
 - `~/.clawdbot/.env`
 - `<skill-dir>/.env`
 
 Example `.env` file:
+
 ```bash
 CLAWDTALK_API_KEY=cc_live_xxx
 ```
 
 The gateway auth token in `openclaw.json`/`clawdbot.json` also supports this:
+
 ```json
 {
   "gateway": {
@@ -122,9 +135,27 @@ The gateway auth token in `openclaw.json`/`clawdbot.json` also supports this:
 }
 ```
 
+### Gateway Tools (Required)
+
+The voice assistant uses `sessions_send` to proxy questions to your Clawdbot. You must allow it on the gateway's `/tools/invoke` endpoint:
+
+```json
+{
+  "gateway": {
+    "tools": {
+      "allow": ["sessions_send"]
+    }
+  }
+}
+```
+
+Without this, the voice assistant will handle calls on its own but won't be able to forward questions to your bot (you'll see `sessions_send failed: 404` in the logs).
+
+Run `./scripts/connect.sh status` to check if this is configured correctly.
+
 ## How It Works
 
-**Voice:** Phone calls connect via Telnyx to the ClawdTalk server. The WebSocket client (`ws-client.js`) routes transcribed speech to your gateway's `/v1/chat/completions` endpoint. Your bot processes it like any other message — same tools, same context. The response is converted to speech and played back.
+**Voice:** Phone calls connect via Telnyx to the ClawdTalk server. The WebSocket client (`ws-client.js`) routes transcribed speech to your gateway's `/v1/chat/completions` endpoint. Your bot processes it like any other message with the same tools and context. The response is converted to speech and played back.
 
 **SMS:** Messages route through the ClawdTalk API. Inbound messages can trigger your bot via webhooks.
 
@@ -134,6 +165,7 @@ The gateway auth token in `openclaw.json`/`clawdbot.json` also supports this:
 |-------|-----|
 | Auth failed | Regenerate API key at clawdtalk.com |
 | Empty responses | Run `./setup.sh`, then `clawdbot gateway restart` |
+| `sessions_send failed: 404` | Add `sessions_send` to `gateway.tools.allow` in your OpenClaw config (see Gateway Tools above) |
 | Connection drops | Check `tail -f .connect.log` for errors |
 | Debug mode | `DEBUG=1 ./scripts/connect.sh restart` |
 
