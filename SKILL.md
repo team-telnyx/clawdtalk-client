@@ -764,6 +764,8 @@ Or via CLI: `openclaw config patch '{"gateway":{"tools":{"allow":["sessions_send
 
 Without this, voice calls will connect but the agent won't be able to process any requests (deep tool calls return 404).
 
+> ⚠️ **WARNING:** This MUST go under `gateway.tools.allow`, NOT top-level `tools.allow`. The top-level `tools.allow` is the agent's tool allowlist — putting `sessions_send` there will restrict your agent to ONLY that tool, breaking everything. If you accidentally did this, remove the top-level `tools.allow` entry and restart.
+
 ## ❌ Common Pitfalls
 
 | Mistake | Symptom | Fix |
