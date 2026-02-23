@@ -3,9 +3,19 @@
 Give your OpenClaw bot a phone number.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-1.3.0-green.svg)](https://github.com/clawdbot/clawdtalk-client)
+[![Version](https://img.shields.io/badge/version-2.0.1-green.svg)](https://github.com/team-telnyx/clawdtalk-client)
 
 Voice calling and SMS messaging for [Clawdbot](https://clawdbot.com). Talk to your bot by phone or exchange texts. Powered by [Telnyx](https://telnyx.com).
+
+## What's New in 2.0
+
+- **Approval requests**: Voice callers can request bot approval for actions that require confirmation
+- **Missions**: Configure AI-powered outbound call campaigns for automated outreach
+- **Call control ID logging**: Track individual call legs with unique control IDs for better debugging
+
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) for the full release history.
 
 ## Architecture
 
@@ -22,6 +32,23 @@ Phone → Telnyx (STT) → ClawdTalk Server → WebSocket → OpenClaw Gateway �
 - **Voice calls**: Real-time conversations with your bot via phone
 - **SMS messaging**: Send and receive text messages
 - **Tool integration**: Your bot's full capabilities, accessible by voice
+- **Approval requests**: Get caller confirmation for sensitive actions
+- **Missions**: Run AI-driven outbound call campaigns
+- **Call control IDs**: Debug calls with unique leg identifiers
+
+## Updating
+
+To update to the latest version, run:
+
+```bash
+./update.sh
+```
+
+Or just ask your bot to update by pasting the repo URL:
+
+> Update clawdtalk to the latest version: https://github.com/team-telnyx/clawdtalk-client
+
+The update script pulls the latest changes and restarts the connection if needed.
 
 ## Requirements
 
