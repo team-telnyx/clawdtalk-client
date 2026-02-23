@@ -44,7 +44,11 @@ To update to the latest version, run:
 ./update.sh
 ```
 
-This script pulls the latest changes and restarts the connection if needed.
+Or just ask your bot to update by pasting the repo URL:
+
+> Update clawdtalk to the latest version: https://github.com/team-telnyx/clawdtalk-client
+
+The update script pulls the latest changes and restarts the connection if needed.
 
 ## Requirements
 
