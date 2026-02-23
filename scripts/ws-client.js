@@ -381,10 +381,9 @@ class ClawdTalkClient {
       'delete', 'remove', 'destroy', 'drop',
       'send message', 'send email', 'send slack', 'send sms', 'send text',
       'post to', 'tweet', 'publish',
-      'create repo', 'create a repo', 'create repository',
+      'repo', 'repository', 'github',  // Any repo/GitHub action is sensitive
       'push to', 'merge', 'deploy',
       'transfer', 'payment', 'purchase', 'buy',
-      'update repo', 'update the repo', 'edit repo',
       'add file', 'add a file', 'modify', 'change',
       'commit', 'write to',
     ];
