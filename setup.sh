@@ -103,6 +103,12 @@ if [ -n "$GATEWAY_CONFIG" ] && [ -f "$GATEWAY_CONFIG" ]; then
     main_agent_name=$(jq -r '(.agents.list[]? | select(.default == true or .id == "main") | .name) // "Assistant"' "$GATEWAY_CONFIG" 2>/dev/null || echo "Assistant")
     main_agent_workspace=$(jq -r '(.agents.list[]? | select(.default == true or .id == "main") | .workspace) // .agents.defaults.workspace // "/home/node/clawd"' "$GATEWAY_CONFIG" 2>/dev/null || echo "/home/node/clawd")
 
+    # Extract gateway connection details for skill-config.json (so ws-client doesn't need to read gateway config at runtime)
+    gateway_port=$(jq -r '.gateway.port // 18789' "$GATEWAY_CONFIG" 2>/dev/null || echo "18789")
+    gateway_token=$(jq -r '.gateway.auth.token // ""' "$GATEWAY_CONFIG" 2>/dev/null || echo "")
+    gateway_url="http://127.0.0.1:${gateway_port}"
+    main_agent_id=$(jq -r '(.agents.list[]? | select(.default == true) | .id) // (.agents.list[0]?.id) // "main"' "$GATEWAY_CONFIG" 2>/dev/null || echo "main")
+
     if [ "$has_voice" = "true" ]; then
         echo "   ✓ Voice agent already configured in gateway"
         voice_agent_added=true
@@ -117,24 +123,17 @@ if [ -n "$GATEWAY_CONFIG" ] && [ -f "$GATEWAY_CONFIG" ]; then
                 workspace: $workspace
             }')
 
-        # Add voice agent to agents.list and enable chatCompletions endpoint
+        # Add voice agent to agents.list
         tmp_config=$(mktemp)
         if jq --argjson agent "$voice_agent" '
-            .agents.list = (.agents.list // []) + [$agent] |
-            .gateway.http.endpoints.chatCompletions.enabled = true
+            .agents.list = (.agents.list // []) + [$agent]
         ' "$GATEWAY_CONFIG" > "$tmp_config" 2>/dev/null; then
             mv "$tmp_config" "$GATEWAY_CONFIG"
             echo "   ✓ Added '${main_agent_name} Voice' agent to gateway config"
-            echo "   ✓ Enabled /v1/chat/completions endpoint"
             voice_agent_added=true
 
-            # Restart gateway to pick up new agent
-            if command -v "$CLI_NAME" &> /dev/null; then
-                echo "   ↻ Restarting gateway to apply changes..."
-                $CLI_NAME gateway restart 2>/dev/null && echo "   ✓ Gateway restarted" || echo "   ⚠️  Restart failed — run '$CLI_NAME gateway restart' manually"
-            else
-                echo "   ⚠️  Run '$CLI_NAME gateway restart' to apply the new agent config"
-            fi
+            # Tell user to restart gateway (skill shouldn't restart the gateway itself)
+            echo "   ⚠️  Run '$CLI_NAME gateway restart' to apply the new agent config"
         else
             rm -f "$tmp_config"
             echo "   ⚠️  Could not auto-configure — see manual steps below"
@@ -154,41 +153,51 @@ else
     echo "   ⚠️  No package.json found"
 fi
 
-# Detect user and agent names from workspace files
+# Detect user and agent names
 echo ""
-echo "👤 Detecting names from workspace..."
+echo "👤 Setting up names..."
 
 WORKSPACE="${main_agent_workspace:-$HOME/.openclaw/workspace}"
 owner_name=""
 agent_name=""
 
-# Try to get owner name from USER.md ("What to call them:" or "Name:")
-if [ -f "$WORKSPACE/USER.md" ]; then
-    # First try "What to call them:" for the preferred name
-    owner_name=$(grep -i "what to call them:" "$WORKSPACE/USER.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
-    # Fall back to "Name:" if not found
-    if [ -z "$owner_name" ]; then
-        owner_name=$(grep -i "^- \*\*Name:" "$WORKSPACE/USER.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
-        # Extract first name only
-        owner_name=$(echo "$owner_name" | awk '{print $1}')
+# Offer to auto-detect from workspace files (opt-in to address security scanner flag)
+auto_detect="y"
+if [ -f "$WORKSPACE/USER.md" ] || [ -f "$WORKSPACE/IDENTITY.md" ]; then
+    read -p "   Auto-detect names from workspace? (Y/n): " auto_detect
+    auto_detect="${auto_detect:-y}"
+fi
+
+if [[ "$auto_detect" =~ ^[Yy]$ ]]; then
+    # Try to get owner name from USER.md ("What to call them:" or "Name:")
+    if [ -f "$WORKSPACE/USER.md" ]; then
+        owner_name=$(grep -i "what to call them:" "$WORKSPACE/USER.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
+        if [ -z "$owner_name" ]; then
+            owner_name=$(grep -i "^- \*\*Name:" "$WORKSPACE/USER.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
+            owner_name=$(echo "$owner_name" | awk '{print $1}')
+        fi
+    fi
+
+    # Try to get agent name from IDENTITY.md
+    if [ -f "$WORKSPACE/IDENTITY.md" ]; then
+        agent_name=$(grep -i "^- \*\*Name:" "$WORKSPACE/IDENTITY.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
     fi
 fi
 
-# Try to get agent name from IDENTITY.md
-if [ -f "$WORKSPACE/IDENTITY.md" ]; then
-    agent_name=$(grep -i "^- \*\*Name:" "$WORKSPACE/IDENTITY.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
+# If auto-detect didn't find names (or was skipped), ask manually
+if [ -z "$owner_name" ]; then
+    read -p "   Your name (for greeting): " owner_name
+fi
+if [ -z "$agent_name" ]; then
+    read -p "   Agent name (optional, press Enter to skip): " agent_name
 fi
 
 if [ -n "$owner_name" ]; then
     echo "   ✓ Owner name: $owner_name"
-else
-    echo "   ⚠️  Could not detect owner name from USER.md"
 fi
 
 if [ -n "$agent_name" ]; then
     echo "   ✓ Agent name: $agent_name"
-else
-    echo "   ⚠️  Could not detect agent name from IDENTITY.md"
 fi
 
 # Create skill-config.json
@@ -218,6 +227,19 @@ else
     greeting="Hey, what's up?"
 fi
 
+gateway_url_json="null"
+gateway_token_json="null"
+agent_id_json="null"
+if [ -n "$gateway_url" ]; then
+    gateway_url_json="\"$gateway_url\""
+fi
+if [ -n "$gateway_token" ]; then
+    gateway_token_json="\"$gateway_token\""
+fi
+if [ -n "$main_agent_id" ]; then
+    agent_id_json="\"$main_agent_id\""
+fi
+
 cat > "$CONFIG_FILE" << EOF
 {
   "api_key": $api_key_json,
@@ -225,11 +247,14 @@ cat > "$CONFIG_FILE" << EOF
   "owner_name": $owner_name_json,
   "agent_name": $agent_name_json,
   "greeting": "$greeting",
-  "max_conversation_turns": 20
+  "gateway_url": $gateway_url_json,
+  "gateway_token": $gateway_token_json,
+  "agent_id": $agent_id_json
 }
 EOF
 
 echo "   ✓ Configuration saved to: $CONFIG_FILE"
+echo "   ⚠️  Note: If you change your gateway token or port later, re-run setup.sh to update."
 
 # Display next steps
 echo ""

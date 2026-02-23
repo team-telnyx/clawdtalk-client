@@ -14,17 +14,43 @@ import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 
-BASE_URL = os.environ.get("CLAWDTALK_API_URL", "https://clawdtalk.com/v1")
+SKILL_DIR = Path(__file__).resolve().parent.parent
+SKILL_CONFIG = SKILL_DIR / "skill-config.json"
 STATE_FILE = Path(".missions_state.json")
 
+def _load_skill_config():
+    """Load skill-config.json if it exists."""
+    try:
+        if SKILL_CONFIG.exists():
+            return json.loads(SKILL_CONFIG.read_text())
+    except Exception:
+        pass
+    return {}
+
+_skill_config = _load_skill_config()
+
+def _get_base_url():
+    """Get API base URL from env var, skill-config.json, or default."""
+    url = os.environ.get("CLAWDTALK_API_URL")
+    if url:
+        return url
+    server = _skill_config.get("server")
+    if server:
+        return server.rstrip("/") + "/v1"
+    return "https://clawdtalk.com/v1"
+
+BASE_URL = _get_base_url()
 
 def get_api_key():
-    """Get API key from environment."""
+    """Get API key from env var or skill-config.json."""
     key = os.environ.get("CLAWDTALK_API_KEY")
-    if not key:
-        print("ERROR: CLAWDTALK_API_KEY environment variable not set", file=sys.stderr)
-        sys.exit(1)
-    return key
+    if key:
+        return key
+    key = _skill_config.get("api_key")
+    if key:
+        return key
+    print("ERROR: No API key found. Set CLAWDTALK_API_KEY or run setup.sh", file=sys.stderr)
+    sys.exit(1)
 
 
 def api_request(method: str, endpoint: str, data: dict = None) -> dict:

@@ -34,21 +34,9 @@ const RECONNECT_DELAY_MIN = 5000;
 const RECONNECT_DELAY_MAX = 180000;
 const DEFAULT_GREETING = "Hey, what's up?";
 
-// Transcription filtering and debouncing
-const MIN_TRANSCRIPT_LENGTH = 2;
-const TRANSCRIPT_DEBOUNCE_MS = 300;
-
-// Tool execution limits
-const MAX_TOOL_LOOPS = 10;
-const TOOL_TIMEOUT_MS = 30000;
-
-// Gateway config paths
-const CLAWDBOT_CONFIG_PATHS = [
-  path.join(process.env.HOME || '/home/node', '.clawdbot', 'clawdbot.json'),
-  path.join(process.env.HOME || '/home/node', '.openclaw', 'openclaw.json'),
-  '/home/node/.clawdbot/clawdbot.json',
-  '/home/node/.openclaw/openclaw.json',
-];
+// Gateway defaults (overridden by skill-config.json values set during setup)
+const DEFAULT_GATEWAY_URL = 'http://127.0.0.1:18789';
+const DEFAULT_AGENT_ID = 'main';
 
 // Default voice context with drip progress updates
 const DEFAULT_VOICE_CONTEXT = `[VOICE CALL ACTIVE] Voice call in progress. Speech is transcribed to text. Your response is converted to speech via TTS.
@@ -85,56 +73,6 @@ APPROVAL REQUESTS (IMPORTANT):
 - If the user confirms by voice (says "approve", "yes", "go ahead"), treat it as approved and proceed.
 - Actions that do NOT need approval: reading data, searching, checking status, answering questions, looking things up.`;
 
-function loadGatewayConfig() {
-  // Collect config from all paths, prioritizing ones with valid tokens
-  var bestConfig = null;
-  var configWithToken = null;
-  
-  for (var i = 0; i < CLAWDBOT_CONFIG_PATHS.length; i++) {
-    try {
-      if (fs.existsSync(CLAWDBOT_CONFIG_PATHS[i])) {
-        var config = JSON.parse(fs.readFileSync(CLAWDBOT_CONFIG_PATHS[i], 'utf8'));
-        var port = (config.gateway && config.gateway.port) || 18789;
-        var token = resolveEnvVar((config.gateway && config.gateway.auth && config.gateway.auth.token) || '');
-        
-        // Find the main agent ID (first agent or one marked default)
-        var mainAgentId = 'main';
-        if (config.agents && config.agents.list && config.agents.list.length > 0) {
-          var defaultAgent = config.agents.list.find(function(a) { return a.default; });
-          mainAgentId = defaultAgent ? defaultAgent.id : config.agents.list[0].id;
-        }
-        
-        var result = { 
-          chatUrl: 'http://127.0.0.1:' + port + '/v1/chat/completions',
-          toolsUrl: 'http://127.0.0.1:' + port + '/tools/invoke',
-          token: token,
-          mainAgentId: mainAgentId
-        };
-        
-        // Keep first config as fallback
-        if (!bestConfig) bestConfig = result;
-        
-        // If this config has a token, use it immediately
-        if (token) {
-          configWithToken = result;
-          break;
-        }
-      }
-    } catch (e) {}
-  }
-  
-  // Return config with token, or best available, or defaults
-  if (configWithToken) return configWithToken;
-  if (bestConfig) return bestConfig;
-  var defaultPort = 18789;
-  return {
-    chatUrl: process.env.CLAWDBOT_GATEWAY_URL || 'http://127.0.0.1:' + defaultPort + '/v1/chat/completions',
-    toolsUrl: 'http://127.0.0.1:' + defaultPort + '/tools/invoke',
-    token: process.env.CLAWDBOT_GATEWAY_TOKEN || '',
-    mainAgentId: 'main'
-  };
-}
-
 // Parse command line args for server override
 function parseArgs() {
   var args = process.argv.slice(2);
@@ -156,10 +94,6 @@ class ClawdTalkClient {
     this.pingTimer = null;
     this.pongTimeout = null;
     this.conversations = new Map();
-    this.pendingRequests = new Map();
-    this.transcriptionDebounce = new Map();
-    this.queuedTranscriptions = new Map();
-    this.pendingApprovals = new Map(); // requestId -> { resolve, reject, timeout }
     this.args = parseArgs();
 
     // Exponential backoff for reconnection
@@ -167,13 +101,10 @@ class ClawdTalkClient {
     this.currentReconnectDelay = RECONNECT_DELAY_MIN;
 
     // Gateway
-    this.gatewayChatUrl = null;
     this.gatewayToolsUrl = null;
     this.gatewayToken = null;
-    this.gatewayAgent = 'main';
     this.mainAgentId = 'main';
     this.voiceContext = DEFAULT_VOICE_CONTEXT;
-    this.maxConversationTurns = 20;
     this.greeting = DEFAULT_GREETING;
     
     // Personalization
@@ -234,15 +165,12 @@ class ClawdTalkClient {
   }
 
   loadSkillConfig() {
-    var gwConfig = loadGatewayConfig();
-    this.gatewayChatUrl = gwConfig.chatUrl;
-    this.gatewayToolsUrl = gwConfig.toolsUrl;
-    this.gatewayToken = gwConfig.token;
-    this.mainAgentId = gwConfig.mainAgentId;
+    // Gateway config from skill-config.json (set during setup.sh) with env var fallbacks
+    var gatewayUrl = resolveEnvVar(this.config.gateway_url || '') || process.env.OPENCLAW_GATEWAY_URL || process.env.CLAWDBOT_GATEWAY_URL || DEFAULT_GATEWAY_URL;
+    this.gatewayToolsUrl = gatewayUrl.replace(/\/$/, '') + '/tools/invoke';
+    this.gatewayToken = resolveEnvVar(this.config.gateway_token || '') || process.env.OPENCLAW_GATEWAY_TOKEN || process.env.CLAWDBOT_GATEWAY_TOKEN || '';
+    this.mainAgentId = this.config.agent_id || DEFAULT_AGENT_ID;
 
-    if (this.config.max_conversation_turns) {
-      this.maxConversationTurns = this.config.max_conversation_turns;
-    }
     this.greeting = this.config.greeting || DEFAULT_GREETING;
     
     // Load names for voice context
@@ -259,7 +187,7 @@ class ClawdTalkClient {
 
     if (this.ownerName) this.log('INFO', 'Owner: ' + this.ownerName);
     if (this.agentName) this.log('INFO', 'Agent: ' + this.agentName);
-    this.log('INFO', 'Gateway: ' + this.gatewayChatUrl);
+    this.log('INFO', 'Gateway tools: ' + this.gatewayToolsUrl);
     this.log('INFO', 'Main agent: ' + this.mainAgentId);
   }
 
@@ -378,35 +306,10 @@ class ClawdTalkClient {
 
     if (event === 'call.ended') {
       this.conversations.delete(callId);
-      var debounce = this.transcriptionDebounce.get(callId);
-      if (debounce) {
-        clearTimeout(debounce.timer);
-        this.transcriptionDebounce.delete(callId);
-      }
       this.log('INFO', 'Call ended: ' + callId);
       
       // Report call outcome to user
       this.reportCallOutcome(msg);
-      return;
-    }
-
-    // Handle transcription events (could be 'message', 'transcription', or 'transcript')
-    if ((event === 'message' || event === 'transcription' || event === 'transcript') && callId) {
-      var text = (msg.text || msg.transcript || '').trim();
-      if (!text || text.replace(/\s/g, '').length < MIN_TRANSCRIPT_LENGTH) {
-        return;
-      }
-
-      this.log('INFO', 'STT [' + callId + ']: ' + text);
-
-      var pending = this.pendingRequests.get(callId);
-      if (!pending) {
-        this.debounceTranscription(callId, text);
-      } else {
-        this.log('INFO', 'Request in-flight, queuing: ' + text);
-        var existing = this.queuedTranscriptions.get(callId);
-        this.queuedTranscriptions.set(callId, existing ? existing + ' ' + text : text);
-      }
       return;
     }
 
@@ -913,243 +816,6 @@ class ClawdTalkClient {
     }
   }
 
-  debounceTranscription(callId, text) {
-    var existing = this.transcriptionDebounce.get(callId);
-
-    if (existing) {
-      clearTimeout(existing.timer);
-      existing.text += ' ' + text;
-    } else {
-      existing = { text: text, timer: null };
-      this.transcriptionDebounce.set(callId, existing);
-    }
-
-    var self = this;
-    existing.timer = setTimeout(function() {
-      var debounce = self.transcriptionDebounce.get(callId);
-      if (debounce) {
-        var finalText = debounce.text;
-        self.transcriptionDebounce.delete(callId);
-        self.log('INFO', 'Processing [' + callId + ']: ' + finalText);
-        self.runAgentLoop(callId, finalText);
-      }
-    }, TRANSCRIPT_DEBOUNCE_MS);
-  }
-
-  // ── Agent Loop with Tool Execution ──────────────────────────
-
-  async runAgentLoop(callId, userText) {
-    if (!this.conversations.has(callId)) {
-      this.conversations.set(callId, [
-        { role: 'system', content: this.voiceContext }
-      ]);
-    }
-
-    var history = this.conversations.get(callId);
-    history.push({ role: 'user', content: userText });
-
-    // Trim history
-    while (history.length > this.maxConversationTurns * 2 + 1) {
-      history.splice(1, 1); // Keep system message
-    }
-
-    var startTime = Date.now();
-    this.pendingRequests.set(callId, true);
-
-    // "One moment" fallback timer
-    var self = this;
-    var fallbackSent = false;
-    var fallbackTimer = setTimeout(async function() {
-      if (self.conversations.has(callId) && !fallbackSent) {
-        fallbackSent = true;
-        await self.sendResponse(callId, 'One moment...');
-        self.log('INFO', 'Sent fallback for slow response');
-      }
-    }, 5000);
-
-    try {
-      var loopCount = 0;
-      var finalContent = null;
-
-      while (loopCount < MAX_TOOL_LOOPS) {
-        loopCount++;
-        
-        // Make chat completion request (non-streaming for tool handling)
-        var response = await this.chatCompletion(callId, history);
-        
-        if (!response) {
-          this.log('ERROR', 'No response from gateway');
-          finalContent = "Sorry, I couldn't process that.";
-          break;
-        }
-
-        var choice = response.choices && response.choices[0];
-        if (!choice) {
-          this.log('ERROR', 'No choice in response');
-          finalContent = "Sorry, something went wrong.";
-          break;
-        }
-
-        var message = choice.message;
-        
-        // Check for tool calls
-        if (message.tool_calls && message.tool_calls.length > 0) {
-          this.log('INFO', 'Tool calls detected: ' + message.tool_calls.length);
-          
-          // Add assistant message with tool calls to history
-          history.push({
-            role: 'assistant',
-            content: message.content || null,
-            tool_calls: message.tool_calls
-          });
-
-          // Execute each tool call
-          for (var i = 0; i < message.tool_calls.length; i++) {
-            var toolCall = message.tool_calls[i];
-            var toolResult = await this.executeTool(toolCall);
-            
-            // Add tool result to history
-            history.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(toolResult)
-            });
-          }
-          
-          // Continue loop to get final response
-          continue;
-        }
-
-        // No tool calls - we have final content
-        finalContent = message.content || '';
-        
-        // Add to history
-        if (finalContent) {
-          history.push({ role: 'assistant', content: finalContent });
-        }
-        
-        break;
-      }
-
-      if (loopCount >= MAX_TOOL_LOOPS) {
-        this.log('WARN', 'Max tool loops reached');
-        finalContent = finalContent || "Sorry, that took too long to process.";
-      }
-
-      // Send final response as TTS
-      clearTimeout(fallbackTimer);
-      var cleanedResponse = this.cleanForVoice(finalContent || '');
-      
-      if (cleanedResponse && cleanedResponse.length > 2 && this.conversations.has(callId)) {
-        await this.sendResponse(callId, cleanedResponse);
-      } else if (!cleanedResponse || cleanedResponse.length <= 2) {
-        this.log('WARN', 'Empty response');
-        if (this.conversations.has(callId) && !fallbackSent) {
-          await this.sendResponse(callId, "Sorry, I got an empty response.");
-        }
-      }
-
-      var elapsed = Date.now() - startTime;
-      this.log('INFO', 'Response complete (' + elapsed + 'ms, ' + loopCount + ' loop(s)) [' + callId + ']');
-
-    } catch (err) {
-      clearTimeout(fallbackTimer);
-      this.log('ERROR', 'Agent loop failed: ' + err.message);
-      if (this.conversations.has(callId)) {
-        await this.sendResponse(callId, 'Sorry, I had trouble with that request.');
-      }
-    } finally {
-      this.pendingRequests.delete(callId);
-
-      // Process queued transcriptions
-      if (this.queuedTranscriptions.has(callId)) {
-        var queuedText = this.queuedTranscriptions.get(callId);
-        this.queuedTranscriptions.delete(callId);
-        if (this.conversations.has(callId)) {
-          this.log('INFO', 'Processing queued: ' + queuedText);
-          this.runAgentLoop(callId, queuedText);
-        }
-      }
-    }
-  }
-
-  // ── Chat Completion (non-streaming) ─────────────────────────
-
-  async chatCompletion(callId, messages) {
-    try {
-      var response = await fetch(this.gatewayChatUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + this.gatewayToken,
-          'x-clawdbot-agent-id': this.gatewayAgent,
-          'x-clawdbot-session-key': 'voice-call-' + callId,
-        },
-        body: JSON.stringify({
-          messages: messages,
-          max_tokens: 500,
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(60000),
-      });
-
-      if (!response.ok) {
-        var errBody = await response.text().catch(function() { return ''; });
-        this.log('ERROR', 'Gateway HTTP ' + response.status + ': ' + errBody.substring(0, 200));
-        return null;
-      }
-
-      return await response.json();
-    } catch (err) {
-      this.log('ERROR', 'Chat completion failed: ' + err.message);
-      return null;
-    }
-  }
-
-  // ── Tool Execution via /tools/invoke ────────────────────────
-
-  async executeTool(toolCall) {
-    var toolName = toolCall.function.name;
-    var toolArgs = {};
-    
-    try {
-      toolArgs = JSON.parse(toolCall.function.arguments || '{}');
-    } catch (e) {
-      this.log('WARN', 'Failed to parse tool args: ' + e.message);
-    }
-
-    this.log('INFO', 'Executing tool: ' + toolName + ' args=' + JSON.stringify(toolArgs).substring(0, 100));
-
-    try {
-      var response = await fetch(this.gatewayToolsUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + this.gatewayToken,
-        },
-        body: JSON.stringify({
-          tool: toolName,
-          args: toolArgs,
-          sessionKey: 'voice',
-        }),
-        signal: AbortSignal.timeout(TOOL_TIMEOUT_MS),
-      });
-
-      if (!response.ok) {
-        var errBody = await response.text().catch(function() { return ''; });
-        this.log('ERROR', 'Tool invoke HTTP ' + response.status + ': ' + errBody.substring(0, 200));
-        return { ok: false, error: 'Tool execution failed: HTTP ' + response.status };
-      }
-
-      var result = await response.json();
-      this.log('INFO', 'Tool result: ' + JSON.stringify(result).substring(0, 200));
-      return result;
-    } catch (err) {
-      this.log('ERROR', 'Tool execution failed: ' + err.message);
-      return { ok: false, error: 'Tool execution failed: ' + err.message };
-    }
-  }
-
   // ── TTS Helpers ─────────────────────────────────────────────
 
   cleanForVoice(text) {
@@ -1243,14 +909,8 @@ class ClawdTalkClient {
       summary = emoji + ' Call ended: ' + reason;
     }
     
-    // Use /tools/invoke to call sessions_send tool
-    // Derive tools endpoint from chat URL (replace /v1/chat/completions with /tools/invoke)
-    var toolsInvokeUrl = this.gatewayChatUrl ? 
-      this.gatewayChatUrl.replace('/v1/chat/completions', '/tools/invoke') :
-      'http://localhost:18789/tools/invoke';
-    
     try {
-      var response = await fetch(toolsInvokeUrl, {
+      var response = await fetch(this.gatewayToolsUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1368,9 +1028,8 @@ class ClawdTalkClient {
     this.log('INFO', 'ClawdTalk WebSocket Client v1.3.0');
     this.log('INFO', 'Full agentic mode with main session routing');
     this.log('INFO', '═══════════════════════════════════════════════');
-    this.log('INFO', 'Chat endpoint: ' + this.gatewayChatUrl);
     this.log('INFO', 'Tools endpoint: ' + this.gatewayToolsUrl);
-    this.log('INFO', 'Agent: ' + this.gatewayAgent);
+    this.log('INFO', 'Main agent: ' + this.mainAgentId);
     this.connect();
   }
 }

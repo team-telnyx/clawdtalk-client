@@ -136,10 +136,7 @@ start_connection() {
     
     echo "🚀 Starting WebSocket connection..."
     
-    # Source .env files for environment variable resolution
-    # Supports both OpenClaw and Clawdbot paths
-    [ -f "$HOME/.openclaw/.env" ] && . "$HOME/.openclaw/.env"
-    [ -f "$HOME/.clawdbot/.env" ] && . "$HOME/.clawdbot/.env"
+    # Source skill's own .env if it exists (for skill-specific env vars only)
     [ -f "$SKILL_DIR/.env" ] && . "$SKILL_DIR/.env"
     
     # Rotate log if it's too big (> 1MB)
