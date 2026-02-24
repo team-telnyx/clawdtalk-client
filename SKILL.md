@@ -7,6 +7,8 @@ metadata: {"clawdbot":{"emoji":"📞","primaryEnv":"CLAWDTALK_API_KEY","homepage
 
 # ClawdTalk
 
+> ⚠️ **First time setup?** Read `SETUP.md` in this directory before anything else. It walks you through the complete configuration flow step by step.
+
 Voice calling, SMS messaging, and AI Missions for Clawdbot. Call your bot by phone, send texts, or run autonomous multi-step outreach campaigns — powered by ClawdTalk.
 
 > **Trust:** By using this skill, voice transcripts, SMS messages, and mission data are sent to clawdtalk.com (operated by Telnyx). Only install if you trust this service with your conversation data.
