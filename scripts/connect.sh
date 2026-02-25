@@ -60,7 +60,8 @@ check_config() {
     if [ -z "$api_key" ] || [ "$api_key" = "null" ] || [ "$api_key" = "YOUR_API_KEY_HERE" ]; then
         echo -e "${RED}❌ No API key configured.${NC}"
         echo ""
-        echo "Get your API key from https://clawdtalk.com → Dashboard"
+        local server_url=$(jq -r '.server // "clawdtalk.com"' "$CONFIG_FILE" 2>/dev/null)
+        echo "Get your API key from https://${server_url#https://} → Dashboard"
         echo "Then add it to skill-config.json"
         exit 1
     fi
@@ -241,7 +242,12 @@ show_status() {
     echo ""
     echo "Configuration:"
     echo "============="
-    local server_url=$(jq -r '.server // "https://clawdtalk.com"' "$CONFIG_FILE" 2>/dev/null)
+    local server_url=$(jq -r '.server // empty' "$CONFIG_FILE" 2>/dev/null)
+    if [ -z "$server_url" ]; then
+        echo -e "  ${RED}Server: NOT CONFIGURED${NC}"
+        echo "  Add 'server' to skill-config.json"
+        return
+    fi
     
     echo "  Server: $server_url"
     echo ""

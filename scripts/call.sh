@@ -12,7 +12,7 @@
 #   ./scripts/call.sh end <call_id>                          # End an active call
 #
 # Env vars: none
-# Endpoints: https://clawdtalk.com
+# Endpoints: reads 'server' from skill-config.json
 # Reads: skill-config.json
 # Writes: none
 
@@ -63,7 +63,8 @@ resolve_config() {
 
 CONFIG=$(resolve_config)
 API_KEY=$(echo "$CONFIG" | jq -r '.api_key // empty')
-SERVER=$(echo "$CONFIG" | jq -r '.server // "https://clawdtalk.com"')
+SERVER=$(echo "$CONFIG" | jq -r '.server // empty')
+[[ -n "$SERVER" ]] || error "No server configured in skill-config.json"
 
 [[ -n "$API_KEY" ]] || error "API key not configured. Run ./setup.sh"
 

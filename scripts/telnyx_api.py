@@ -42,7 +42,8 @@ def _get_base_url():
     server = _skill_config.get("server")
     if server:
         return server.rstrip("/") + "/v1"
-    return "https://clawdtalk.com/v1"
+    print("ERROR: No server configured. Set CLAWDTALK_API_URL or add 'server' to skill-config.json", file=sys.stderr)
+    sys.exit(1)
 
 BASE_URL = _get_base_url()
 

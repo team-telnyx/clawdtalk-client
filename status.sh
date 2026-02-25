@@ -47,17 +47,17 @@ fi
 
 # Parse configuration
 api_key=$(jq -r '.api_key // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
-server=$(jq -r '.server // "https://clawdtalk.com"' "$CONFIG_FILE" 2>/dev/null || echo "https://clawdtalk.com")
+server=$(jq -r '.server // empty' "$CONFIG_FILE" 2>/dev/null)
 
 # Display config summary
 echo "📋 Configuration"
 echo "----------------"
-echo "Server: $server"
+echo "Server: ${server:-NOT CONFIGURED}"
 
 if [ -z "$api_key" ] || [ "$api_key" = "null" ] || [ "$api_key" = "YOUR_API_KEY_HERE" ]; then
     echo "API Key: ❌ NOT SET"
     echo ""
-    echo "Get your API key from https://clawdtalk.com → Dashboard"
+    echo "Get your API key from ${server:-https://clawdtalk.com} → Dashboard"
     echo "Then add it to skill-config.json"
 else
     masked_key="${api_key:0:6}...${api_key: -4}"

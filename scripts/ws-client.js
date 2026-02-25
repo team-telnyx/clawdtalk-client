@@ -8,7 +8,7 @@
  * v1.3.0: Instant approval via WebSocket (no more polling delay)
  *
  * Env vars: OPENCLAW_GATEWAY_URL, CLAWDBOT_GATEWAY_URL, OPENCLAW_GATEWAY_TOKEN, CLAWDBOT_GATEWAY_TOKEN
- * Endpoints: https://clawdtalk.com (WebSocket), http://127.0.0.1:<port> (local gateway)
+ * Endpoints: reads 'server' from skill-config.json (WebSocket), http://127.0.0.1:<port> (local gateway)
  * Reads: skill-config.json
  * Writes: none
  */
@@ -153,7 +153,8 @@ class ClawdTalkClient {
         this.config.server = this.args.serverOverride;
         this.log('INFO', 'Server override: ' + this.config.server);
       } else if (!this.config.server) {
-        this.config.server = 'https://clawdtalk.com';
+        this.log('ERROR', 'No server configured in skill-config.json');
+        process.exit(1);
       }
 
       if (!this.config.api_key) throw new Error('No API key configured');

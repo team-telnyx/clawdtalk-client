@@ -12,7 +12,7 @@
 #   ./approval.sh status <request_id>
 #
 # Env vars: none
-# Endpoints: https://clawdtalk.com
+# Endpoints: reads 'server' from skill-config.json
 # Reads: skill-config.json
 # Writes: none
 
@@ -121,7 +121,10 @@ request_approval() {
     api_key=$(get_config "api_key")
     local server
     server=$(get_config "server")
-    server="${server:-https://clawdtalk.com}"
+    if [ -z "$server" ]; then
+        echo -e "${RED}Error: No server configured in skill-config.json${NC}" >&2
+        exit 1
+    fi
     
     if [ -z "$api_key" ]; then
         echo -e "${RED}Error: No API key configured${NC}" >&2
@@ -237,7 +240,10 @@ check_status() {
     api_key=$(get_config "api_key")
     local server
     server=$(get_config "server")
-    server="${server:-https://clawdtalk.com}"
+    if [ -z "$server" ]; then
+        echo -e "${RED}Error: No server configured in skill-config.json${NC}" >&2
+        exit 1
+    fi
     
     local response
     response=$(curl -s "$server/v1/approvals/$request_id" \
@@ -256,7 +262,10 @@ list_approvals() {
     api_key=$(get_config "api_key")
     local server
     server=$(get_config "server")
-    server="${server:-https://clawdtalk.com}"
+    if [ -z "$server" ]; then
+        echo -e "${RED}Error: No server configured in skill-config.json${NC}" >&2
+        exit 1
+    fi
     
     curl -s "$server/v1/approvals?status=$status" \
         -H "Authorization: Bearer $api_key" | jq '.'

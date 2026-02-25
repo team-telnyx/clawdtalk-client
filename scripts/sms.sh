@@ -9,7 +9,7 @@
 #   sms.sh conversations
 #
 # Env vars: none
-# Endpoints: https://clawdtalk.com
+# Endpoints: reads 'server' from skill-config.json
 # Reads: skill-config.json
 # Writes: none
 
@@ -27,7 +27,11 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
 fi
 
 API_KEY=$(jq -r '.api_key // empty' "$CONFIG_FILE")
-SERVER=$(jq -r '.server // "https://clawdtalk.com"' "$CONFIG_FILE")
+SERVER=$(jq -r '.server // empty' "$CONFIG_FILE")
+if [[ -z "$SERVER" || "$SERVER" == "null" ]]; then
+  echo "Error: No server configured in skill-config.json" >&2
+  exit 1
+fi
 
 if [[ -z "$API_KEY" || "$API_KEY" == "null" ]]; then
   echo "Error: No API key configured. Add api_key to skill-config.json" >&2
