@@ -26,7 +26,7 @@ Voice calling, SMS messaging, and AI Missions for Clawdbot. Call your bot by pho
 
 - Voice transcripts and SMS content are transmitted to clawdtalk.com.
 - Mission state and events are stored server-side for tracking and insights.
-- `setup.sh` reads gateway config to extract connection details; with confirmation it adds a voice agent and `sessions_send` to `gateway.tools.allow`.
+- `setup.sh` reads gateway config to extract connection details; with confirmation it adds `sessions_send` to `gateway.tools.allow`.
 - API key is stored in `skill-config.json` — use env var `CLAWDTALK_API_KEY` or a `${CLAWDTALK_API_KEY}` reference to avoid plaintext storage.
 
 ---
@@ -159,7 +159,7 @@ The script always works with local IDs. You don't need to worry about Telnyx IDs
 2. **Add your phone** in Settings
 3. **Get API key** from Dashboard
 4. **Run setup**: `./setup.sh`
-   > `setup.sh` reads your gateway config to extract connection details, adds a voice agent to `agents.list`, and (with confirmation) adds `sessions_send` to `gateway.tools.allow`. Gateway config is at `~/.openclaw/openclaw.json` or `~/.clawdbot/clawdbot.json`.
+   > `setup.sh` reads your gateway config to extract connection details and (with confirmation) adds `sessions_send` to `gateway.tools.allow`. Gateway config is at `~/.openclaw/openclaw.json` or `~/.clawdbot/clawdbot.json`.
 5. **Start connection**: `./scripts/connect.sh start`
 
 ## Voice Calls

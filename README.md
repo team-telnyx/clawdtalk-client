@@ -69,7 +69,7 @@ cd ~/clawd/skills/clawdtalk-client
 ./scripts/connect.sh start
 ```
 
-The setup script will ask for your API key, configure the voice agent in your gateway, and create `skill-config.json`.
+The setup script will ask for your API key, configure gateway connection details and tools policy, and create `skill-config.json`.
 
 ## Usage
 
