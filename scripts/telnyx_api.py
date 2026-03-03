@@ -350,16 +350,22 @@ def list_events(mission_id: str, run_id: str) -> list:
 def create_assistant(
     name: str,
     instructions: str,
-    greeting: str,
+    greeting: str = "",
     features: list = None,  # defaults to ["telephony"]
     model: str = "openai/gpt-4o",
     tools: list = None,
     description: str = None,
+    voice: str = "Rime.ArcanaV3.astra",
 ) -> str:
     """Create an AI assistant. Returns assistant_id.
 
     Voice settings, transcription, and telephony defaults are applied
     server-side. Pass extra Telnyx-specific config via extra_config if needed.
+
+    Args:
+        greeting: Initial greeting when call connects. Defaults to empty string
+            (recommended for outbound calls where the recipient speaks first).
+        voice: Voice model to use. Defaults to "Rime.ArcanaV3.astra".
 
     Tools can include any combination of:
       - {"type": "hangup", "hangup": {"description": "..."}}
@@ -392,6 +398,7 @@ def create_assistant(
         "model": model,
         "instructions": instructions,
         "greeting": greeting,
+        "voice": voice,
         "tools": tools,
         "enabled_features": features or ["telephony", "messaging"],
     }
@@ -741,13 +748,18 @@ def setup_voice_agent(
     mission_slug: str,
     name: str,
     instructions: str,
-    greeting: str,
+    greeting: str = "",
     tools: list = None,
     model: str = "openai/gpt-4o",
+    voice: str = "Rime.ArcanaV3.astra",
 ) -> tuple:
     """
     Create voice assistant, assign phone number, and link to mission run.
     Returns (assistant_id, phone_number).
+
+    Args:
+        greeting: Initial greeting. Defaults to empty string (outbound calls).
+        voice: Voice model. Defaults to "Rime.ArcanaV3.astra".
 
     Voice settings, transcription, and telephony defaults are applied server-side.
     """
@@ -762,7 +774,7 @@ def setup_voice_agent(
     if tools is not None:
         kwargs["tools"] = tools
     assistant_id = create_assistant(
-        name, instructions, greeting, ["telephony", "messaging"], model=model, **kwargs
+        name, instructions, greeting, ["telephony", "messaging"], model=model, voice=voice, **kwargs
     )
     update_mission_state(mission_slug, {"assistant_id": assistant_id})
 
@@ -840,9 +852,10 @@ Commands:
     list-events <mission_id> <run_id>
 
   Assistants:
-    create-assistant <name> <instructions> <greeting> [options_json]
-      options_json keys: features, model, tools, description
-      Voice/transcription/telephony defaults applied server-side.
+    create-assistant <name> <instructions> [greeting] [options_json]
+      greeting defaults to "" (empty — recommended for outbound calls)
+      options_json keys: features, model, tools, description, voice
+      Default voice: Rime.ArcanaV3.astra
       Tool types: hangup, webhook, transfer, handoff, retrieval, refer,
         send_dtmf, send_message
     list-assistants [--name=<filter>] [--page=<n>] [--size=<n>]

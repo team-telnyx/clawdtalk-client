@@ -374,14 +374,23 @@ When your task requires making calls or sending SMS, create an AI assistant firs
 
 ### Step 2.1: Create a Voice/SMS Assistant
 
-**For phone calls:**
+**Default voice:** `Rime.ArcanaV3.astra` — applied automatically unless overridden via options JSON (`{"voice": "other.voice"}`).
+
+**Default greeting:** Empty string `""` — recommended for outbound calls where the recipient answers and speaks first. For inbound or IVR scenarios, pass an explicit greeting.
+
+**For phone calls (outbound — no greeting):**
 ```bash
-python scripts/telnyx_api.py create-assistant "Contractor Outreach Agent" "You are calling on behalf of [COMPANY]. Your goal is to [SPECIFIC GOAL]. Be professional and concise. Collect: [WHAT TO COLLECT]. If they cannot talk now, ask for a good callback time." "Hi, this is an AI assistant calling on behalf of [COMPANY]. Is this [BUSINESS NAME]? I am calling to inquire about your services. Do you have a moment?" '["telephony", "messaging"]'
+python scripts/telnyx_api.py create-assistant "Contractor Outreach Agent" "You are calling on behalf of [COMPANY]. Your goal is to [SPECIFIC GOAL]. Be professional and concise. Collect: [WHAT TO COLLECT]. If they cannot talk now, ask for a good callback time." "" '["telephony", "messaging"]'
+```
+
+**For phone calls (with greeting — e.g. inbound or IVR):**
+```bash
+python scripts/telnyx_api.py create-assistant "Contractor Outreach Agent" "You are calling on behalf of [COMPANY]." "Hi, this is an AI assistant calling on behalf of [COMPANY]. Do you have a moment?" '["telephony", "messaging"]'
 ```
 
 **For SMS:**
 ```bash
-python scripts/telnyx_api.py create-assistant "SMS Outreach Agent" "You send SMS messages to collect information. Keep messages brief and professional." "Hi! I am reaching out on behalf of [COMPANY] regarding [PURPOSE]. Could you please reply with [REQUESTED INFO]?" '["telephony", "messaging"]'
+python scripts/telnyx_api.py create-assistant "SMS Outreach Agent" "You send SMS messages to collect information. Keep messages brief and professional." "" '["telephony", "messaging"]'
 ```
 
 **Save the returned `assistant_id`**.
@@ -397,8 +406,10 @@ python scripts/telnyx_api.py assign-phone <phone_number_id> <connection_id> voic
 ### High-Level Alternative: Setup Agent in One Step
 
 ```bash
-python scripts/telnyx_api.py setup-agent "find-window-washing-contractors" "Contractor Caller" "You are calling to get quotes for commercial window washing. Ask about: rates per floor, availability, insurance. Be professional." "Hi, I am calling to inquire about your commercial window washing services. Do you have a moment to discuss rates?"
+python scripts/telnyx_api.py setup-agent "find-window-washing-contractors" "Contractor Caller" "You are calling to get quotes for commercial window washing. Ask about: rates per floor, availability, insurance. Be professional." ""
 ```
+
+> **Note:** Greeting defaults to empty string for outbound calls. The recipient answers and speaks first; the assistant listens and responds naturally. Pass a greeting only for inbound/IVR scenarios.
 
 This automatically creates the assistant, links it to the mission run, finds an available phone number, assigns it, and saves all IDs to the state file.
 
@@ -579,7 +590,7 @@ python scripts/telnyx_api.py list-events <mission_id> <run_id>
 
 # Assistants
 python scripts/telnyx_api.py list-assistants [--name=<filter>] [--page=<n>] [--size=<n>]
-python scripts/telnyx_api.py create-assistant <name> <instructions> <greeting> [options_json]
+python scripts/telnyx_api.py create-assistant <name> <instructions> [greeting] [options_json]  # greeting defaults to "", voice defaults to Rime.ArcanaV3.astra
 python scripts/telnyx_api.py get-assistant <assistant_id>
 python scripts/telnyx_api.py update-assistant <assistant_id> <updates_json>
 python scripts/telnyx_api.py get-connection-id <assistant_id> [telephony|messaging]
