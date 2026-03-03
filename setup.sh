@@ -139,16 +139,16 @@ fi
 if [[ "$auto_detect" =~ ^[Yy]$ ]]; then
     # Try to get owner name from USER.md ("What to call them:" or "Name:")
     if [ -f "$WORKSPACE/USER.md" ]; then
-        owner_name=$(grep -i "what to call them:" "$WORKSPACE/USER.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
+        owner_name=$(grep -i "what to call them:" "$WORKSPACE/USER.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | sed 's/^ *//;s/ *$//')
         if [ -z "$owner_name" ]; then
-            owner_name=$(grep -i "^- \*\*Name:" "$WORKSPACE/USER.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
+            owner_name=$(grep -i "^- \*\*Name:" "$WORKSPACE/USER.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | sed 's/^ *//;s/ *$//')
             owner_name=$(echo "$owner_name" | awk '{print $1}')
         fi
     fi
 
     # Try to get agent name from IDENTITY.md
     if [ -f "$WORKSPACE/IDENTITY.md" ]; then
-        agent_name=$(grep -i "^- \*\*Name:" "$WORKSPACE/IDENTITY.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | xargs)
+        agent_name=$(grep -i "^- \*\*Name:" "$WORKSPACE/IDENTITY.md" 2>/dev/null | head -1 | sed 's/.*:\s*//' | tr -d '*' | sed 's/^ *//;s/ *$//')
     fi
 fi
 

@@ -11,7 +11,7 @@ This document tells you (the agent) how to configure the `clawdtalk-client` skil
 | 1 | Install the skill | `clawdhub install clawdtalk-client --registry https://clawhub.ai` | User triggers this. You run the command. |
 | 2 | Get the API key | Ask the user if they didn't provide one | **Mandatory. Do not proceed without it.** |
 | 3 | Validate the API key | `python3 scripts/telnyx_api.py check-key` | Confirms the key is valid before proceeding. |
-| 4 | Run `setup.sh` | `bash ./setup.sh` (interactive, needs PTY) | Handles config, gateway, deps, names. |
+| 4 | Run `setup.sh` | `bash ./setup.sh` (interactive, needs PTY) | Handles config, gateway details, tools policy, deps, names. |
 | 5 | Trim agent name | Edit `skill-config.json` if name has extra text | `setup.sh` sometimes pulls full IDENTITY.md line. |
 | 6 | Start the WebSocket | `bash ./scripts/connect.sh start` | Enables voice calls. |
 | 7 | Verify | `bash ./status.sh` | Confirm everything is green. |
@@ -56,7 +56,6 @@ If it fails or returns an auth error, the key is invalid. Ask the user to regene
 The script handles:
 - Saving the API key
 - Auto-detecting gateway config (port, token, agent ID)
-- Adding a `voice` agent to the gateway config
 - Installing Node.js dependencies
 - Auto-detecting owner and agent names from `USER.md` / `IDENTITY.md`
 - Checking `sessions_send` is in `gateway.tools.allow`
@@ -228,10 +227,6 @@ openclaw gateway restart
 ```
 
 **WARNING**: This goes under `gateway.tools.allow`, NOT top-level `tools.allow`. Putting it at the top level restricts your agent to ONLY that tool, breaking everything.
-
-### 2. Voice Agent Must Exist
-
-`setup.sh` adds a `voice` agent to the gateway's `agents.list`. If it wasn't added (check with `jq '.agents.list[] | select(.id == "voice")' ~/.openclaw/openclaw.json`), the gateway needs a restart after setup adds it.
 
 ---
 
