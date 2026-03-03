@@ -168,7 +168,22 @@ cd "$TEMP_DIR"
 unzip -q "$ARCHIVE_ZIP"
 
 # Copy new files (preserve skill-config.json)
-cp -r clawdtalk-client/* "$SKILL_DIR/" 2>/dev/null || true
+if [ -d "clawdtalk-client" ]; then
+  cp -r clawdtalk-client/* "$SKILL_DIR/" 2>/dev/null || true
+else
+  ARCHIVE_BASENAME=$(basename "$ARCHIVE_ZIP")
+  CHECKSUM_BASENAME=$(basename "$CHECKSUM_FILE")
+  shopt -s dotglob nullglob
+  for item in *; do
+    case "$item" in
+      "$ARCHIVE_BASENAME"|"${CHECKSUM_BASENAME}")
+        continue
+        ;;
+    esac
+    cp -r "$item" "$SKILL_DIR/" 2>/dev/null || true
+  done
+  shopt -u dotglob nullglob
+fi
 
 # Restore config if it was overwritten
 if [ -f "$SKILL_DIR/skill-config.json.bak" ]; then
