@@ -9,11 +9,13 @@
 #
 # Release workflow:
 #   1. make bump-patch                    (or bump-minor)
-#   2. git add package.json
-#   3. git commit -m "chore: bump to vX.Y.Z"
-#   4. git tag vX.Y.Z
-#   5. git push && git push --tags
-#   6. GitHub Actions builds zip + checksum and creates the release automatically
+#   2. git checkout -b chore/bump-vX.Y.Z
+#   3. git add package.json && git commit -m "chore: bump to vX.Y.Z"
+#   4. git push -u origin chore/bump-vX.Y.Z
+#   5. Merge PR to main
+#   6. git checkout main && git pull
+#   7. git tag vX.Y.Z && git push --tags
+#   8. GitHub Actions builds zip + checksum and creates the release automatically
 #
 # Manual release (if Actions unavailable):
 #   1. make release-local
