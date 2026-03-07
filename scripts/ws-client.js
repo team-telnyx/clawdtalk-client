@@ -99,6 +99,7 @@ class ClawdTalkClient {
     this.pingTimer = null;
     this.pongTimeout = null;
     this.conversations = new Map();
+    this.pendingApprovals = new Map(); // requestId -> { resolve, timeout }
     this.args = parseArgs();
 
     // Exponential backoff for reconnection
@@ -211,7 +212,12 @@ class ClawdTalkClient {
 
     this.ws = new WebSocket(serverUrl + '/ws', { handshakeTimeout: 10000 });
     this.ws.on('open', this.onOpen.bind(this));
-    this.ws.on('message', this.onMessage.bind(this));
+    this.ws.on('message', function(data) {
+      this.onMessage(data).catch(function(err) {
+        this.log('ERROR', 'Message handler error: ' + err.message);
+        if (err.stack) this.log('DEBUG', err.stack);
+      }.bind(this));
+    }.bind(this));
     this.ws.on('close', this.onClose.bind(this));
     this.ws.on('error', function(err) {
       this.log('ERROR', 'WS: ' + err.message);
@@ -325,7 +331,9 @@ class ClawdTalkClient {
       this.log('INFO', 'Deep tool request [' + requestId + ']: ' + query.substring(0, 100));
       
       // Process via full Clawdbot agent
-      this.handleDeepToolRequest(callId, requestId, query, msg.context || {});
+      this.handleDeepToolRequest(callId, requestId, query, msg.context || {}).catch(function(err) {
+        this.log('ERROR', 'Deep tool request failed: ' + err.message);
+      }.bind(this));
       return;
     }
 
@@ -337,7 +345,9 @@ class ClawdTalkClient {
       this.log('INFO', 'SMS received from ' + (smsFrom ? smsFrom.substring(0, 6) + '***' : 'unknown') + ': ' + smsBody.substring(0, 50));
       
       // Process via Clawdbot and send reply
-      this.handleInboundSms(smsFrom, smsBody, messageId);
+      this.handleInboundSms(smsFrom, smsBody, messageId).catch(function(err) {
+        this.log('ERROR', 'Inbound SMS handler failed: ' + err.message);
+      }.bind(this));
       return;
     }
 
@@ -347,11 +357,15 @@ class ClawdTalkClient {
       var decision = msg.decision;
       this.log('INFO', 'Approval response via WS: ' + approvalRequestId + ' -> ' + decision);
       
-      var pending = this.pendingApprovals.get(approvalRequestId);
-      if (pending) {
-        clearTimeout(pending.timeout);
-        this.pendingApprovals.delete(approvalRequestId);
-        pending.resolve(decision);
+      try {
+        var pending = this.pendingApprovals.get(approvalRequestId);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          this.pendingApprovals.delete(approvalRequestId);
+          pending.resolve(decision);
+        }
+      } catch (err) {
+        this.log('ERROR', 'Error handling approval response: ' + err.message);
       }
       return;
     }
@@ -362,7 +376,9 @@ class ClawdTalkClient {
       var walkieTranscript = msg.transcript || '';
       var walkieSessionKey = msg.session_key || 'agent:main:main';
       this.log('INFO', 'Walkie request [' + walkieRequestId + ']: ' + walkieTranscript.substring(0, 100));
-      this.handleWalkieRequest(walkieRequestId, walkieTranscript, walkieSessionKey);
+      this.handleWalkieRequest(walkieRequestId, walkieTranscript, walkieSessionKey).catch(function(err) {
+        this.log('ERROR', 'Walkie request handler failed: ' + err.message);
+      }.bind(this));
       return;
     }
 
@@ -664,8 +680,13 @@ class ClawdTalkClient {
     return new Promise(function(resolve) {
       // Set up timeout
       var timeoutId = setTimeout(function() {
-        self.pendingApprovals.delete(requestId);
-        resolve('timeout');
+        try {
+          self.pendingApprovals.delete(requestId);
+          resolve('timeout');
+        } catch (err) {
+          self.log('ERROR', 'Failed to clean up pending approval: ' + err.message);
+          resolve('timeout');
+        }
       }, timeoutMs);
       
       // Register pending approval for WebSocket notification
@@ -687,8 +708,13 @@ class ClawdTalkClient {
     
     const poll = async () => {
       // Check if already resolved via WebSocket
-      if (!this.pendingApprovals.has(requestId)) {
-        return; // Already resolved
+      try {
+        if (!this.pendingApprovals.has(requestId)) {
+          return; // Already resolved
+        }
+      } catch (err) {
+        this.log('ERROR', 'Error checking pending approvals: ' + err.message);
+        return;
       }
       
       try {
@@ -700,9 +726,14 @@ class ClawdTalkClient {
           const result = await response.json();
           if (result.status !== 'pending') {
             // Resolved! Clear and return
-            clearTimeout(timeoutId);
-            this.pendingApprovals.delete(requestId);
-            resolve(result.status);
+            try {
+              clearTimeout(timeoutId);
+              this.pendingApprovals.delete(requestId);
+              resolve(result.status);
+            } catch (err) {
+              this.log('ERROR', 'Error cleaning up pending approval: ' + err.message);
+              resolve(result.status);
+            }
             return;
           }
         }
@@ -711,8 +742,12 @@ class ClawdTalkClient {
       }
       
       // Still pending, poll again
-      if (this.pendingApprovals.has(requestId)) {
-        setTimeout(() => poll(), pollInterval);
+      try {
+        if (this.pendingApprovals.has(requestId)) {
+          setTimeout(() => poll(), pollInterval);
+        }
+      } catch (err) {
+        this.log('ERROR', 'Error checking pending approvals for retry: ' + err.message);
       }
     };
     
